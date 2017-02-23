@@ -17,7 +17,7 @@ wee is a command line multi-user interactive text editor.
 # Schedule
 |      |Joseph                           |Elena                                     |
 |:-----|:--------------------------------|:-----------------------------------------|
-|  3/1 |Launch Django Server             |Develop text editor interface             |
+|  3/1 |Launch Server				             |Develop text editor interface             |
 |  3/8 |Networking with the server       |Develop text editor interface             |
 |  3/15|Develop text editor interface    |Develop text editor interface             |
 |  3/22|Develop text editor interface    |Single-user networking with the server    |
@@ -35,7 +35,7 @@ Elena
 	- possibly the Vector structure we implemented for CS241
 
 Joseph
-1. Use Django with Python for the server, running on the school's virtual machine
+1. Use VM to run the server
 2. Mechanism on sharing text file would be
 	- Generate code when a user wants to share
 	- When the text editor generates the common code, it would copy the text file and 
