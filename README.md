@@ -8,6 +8,12 @@ wee is a command line multi-user interactive text editor.
 - Text editing (no GUI)
 - Concurrent collaboration through server
 
+# Features
+- Insert/Delete text anywhere in the file
+- Scroll through the file using arrow keys
+- Copy/cut text and paste anywhere in the file
+- Command-based interface
+
 # Schedule
 |      |Joseph                           |Elena                                     |
 |:-----|:--------------------------------|:-----------------------------------------|
@@ -24,9 +30,9 @@ wee is a command line multi-user interactive text editor.
 
 # Research results
 Elena
-1. Potentially use curses library with python
-2. Or can base text editor off an exisiting one -- but less likely
-
+1. Potentially use curses library with python/C
+2. Need a data structure
+	- possibly the Vector structure we implemented for CS241
 
 Joseph
 1. Use Django with Python for the server, running on the school's virtual machine
