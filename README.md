@@ -24,7 +24,8 @@ wee is a command line multi-user interactive text editor.
 
 # Research results
 Elena
-
+1. Potentially use curses library with python
+2. Or can base text editor off an exisiting one -- but less likely
 
 
 Joseph
