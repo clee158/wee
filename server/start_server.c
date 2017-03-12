@@ -6,10 +6,87 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <pthread.h>
+#include <signal.h>
+
+typedef struct thread_node {
+	pthread_t thread_id;
+	int client_fd;
+	struct thread_node *next;
+} thread_node;
+
+static int running;
+thread_node *head;
+int sock_fd;
+
+void *client_interaction(void *client_fd) {
+	int client = *((int *) client_fd);
+	size_t len;
+	char buffer[1000];
+
+	while (1) {
+		if ((len = read(client, buffer, 1000 - 1)) == -1) {
+			perror("recv");
+			exit(1);
+		}
+		else if (len == 0) {
+			// Join back with the original thread
+			pthread_exit(NULL);
+			printf("Connection closed\n");
+			break;
+		}
+
+	  buffer[len] = '\0';
+		printf("Server:Msg Received %s\n", buffer);
+	  printf("===\n");
+
+		int n;
+
+		for (n = 0; n < strlen(buffer); n++)
+			buffer[n] = buffer[n] + 1;
+
+		if ((send(client, buffer, strlen(buffer), 0)) == -1) {
+			// Join back with the original thread
+			pthread_exit(NULL);
+			fprintf(stderr, "Failure Sending Message\n");
+			close(client);
+			break;
+		}
+
+		printf("Msg sent: %s\n", buffer);
+	}
+}
+
+void sigint_handler() {
+	printf("Cleaning up before exiting...\n");
+	running = 0;
+	thread_node *curr = head;
+	thread_node *next = NULL;
+
+	while (curr != NULL) {
+		next = curr->next;
+
+		if (curr->client_fd != -1)
+			close(curr->client_fd);
+
+		free(curr);
+		curr = next;
+	}
+
+	close(sock_fd);
+	exit(EXIT_SUCCESS);
+}
 
 int main(int argc, char **argv) {
+	running = 1;
+	signal(SIGINT, sigint_handler);
+	head = malloc(sizeof(thread_node));
+	head->next = NULL;
+	head->thread_id = pthread_self();
+	head->client_fd = -1;
+
 	int s;
-  int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+  sock_fd = socket(AF_INET, SOCK_STREAM, 0);
   struct addrinfo hints, *result;
   memset(&hints, 0, sizeof(struct addrinfo));
   hints.ai_family = AF_INET;
@@ -39,47 +116,31 @@ int main(int argc, char **argv) {
 	printf("Listening on file descriptor %d, port %d\n", sock_fd, ntohs(result_addr->sin_port));
 	
 	int client_fd;
-	char buffer[1000];
-	size_t len;
+	thread_node *curr_node = head;
 
-	while (1) {
-
+	while (running) {
 		if ((client_fd = accept(sock_fd, NULL, NULL)) == -1) {
-			perror("accept");
+			perror("accept_error");
 			exit(1);
-		}
-	  
-		printf("Connection made: client_fd=%d\n", client_fd);
+		} else {
+			pthread_t new_user;
+			
+			if (pthread_create(&new_user, NULL, client_interaction, &client_fd)) {
+				printf("Connection failed with client_fd=%d\n", client_fd);
+			} else {
+				thread_node *new_node = malloc(sizeof(thread_node));
+				new_node->next = NULL;
+				new_node->thread_id = new_user;
+				new_node->client_fd = client_fd;
+				curr_node->next = new_node;
 
-		while (1) {
-			if ((len = read(client_fd, buffer, 1000 - 1)) == -1) {
-				perror("recv");
-				exit(1);
+				printf("Connection made: client_fd=%d\n", client_fd);
 			}
-			else if (len == 0) {
-				printf("Connection closed\n");
-				break;
-			}
-		  buffer[len] = '\0';
-			printf("Server:Msg Received %s\n", buffer);
-		  printf("===\n");
-
-			int n;
-
-			for (n = 0; n < strlen(buffer); n++)
-				buffer[n] = buffer[n] + 1;
-
-			if ((send(client_fd, buffer, strlen(buffer), 0)) == -1) {
-				fprintf(stderr, "Failure Sending Message\n");
-				close(client_fd);
-				break;
-			}
-
-			printf("Msg sent: %s\n", buffer);
 		}
 	}
 
-	close(client_fd);
-	close(sock_fd);
+	if (head != NULL)
+		sigint_handler();
+	
   return 0;
 }
