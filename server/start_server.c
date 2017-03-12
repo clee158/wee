@@ -18,6 +18,7 @@ typedef struct thread_node {
 static int running;
 thread_node *head;
 int sock_fd;
+struct addrinfo hints, *result;
 
 void *client_interaction(void *client_fd) {
 	int client = *((int *) client_fd);
@@ -73,6 +74,7 @@ void sigint_handler() {
 		curr = next;
 	}
 
+	free(result);
 	close(sock_fd);
 	exit(EXIT_SUCCESS);
 }
@@ -87,7 +89,6 @@ int main(int argc, char **argv) {
 
 	int s;
   sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-  struct addrinfo hints, *result;
   memset(&hints, 0, sizeof(struct addrinfo));
   hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
