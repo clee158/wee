@@ -41,10 +41,8 @@ int main(int argc, char **argv) {
 	int client_fd;
 	char buffer[1000];
 	size_t len;
-	size_t size;
 
 	while (1) {
-		size = sizeof(struct sockaddr_in);
 
 		if ((client_fd = accept(sock_fd, NULL, NULL)) == -1) {
 			perror("accept");
@@ -79,27 +77,6 @@ int main(int argc, char **argv) {
 
 			printf("Msg sent: %s\n", buffer);
 		}
-		/*
-		printf("Waiting for connection...\n");
-		
-	  client_fd = accept(sock_fd, NULL, NULL);
-	
-	  int len = read(client_fd, buffer, sizeof(buffer) - 1);
-	  buffer[len] = '\0';
-	  printf("Read %d chars\n", len);
-
-	  printf("%s\n", buffer);
-	  printf("===\n");
-
-
-    if ((send(client_fd, buffer, strlen(buffer),0))== -1) {
-			fprintf(stderr, "Failure Sending Message\n");
-     	close(client_fd);
-     	break;
-    }
-
-   	printf("Msg sent: %s\nbyte length: %d\n", buffer, strlen(buffer));
-		*/
 	}
 
 	close(client_fd);
