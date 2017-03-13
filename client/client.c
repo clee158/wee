@@ -18,17 +18,22 @@ char text[1048576]; // hold 2^20
 int sock_fd;
 char *get_port();
 char *get_ip();
-
+char *ip_addr;
+char *ip_port;
 void *accept_user_inputs(void *arg) {
 	while(1) {
 		printf("Data for Server:\n");
 		fgets(buffer, 1000, stdin);
 
-		if ((send(sock_fd, buffer, strlen(buffer), 0))== -1) {
+		if ((send(sock_fd, buffer, strlen(buffer), 0)) == -1) {
 			fprintf(stderr, "Failure Sending Message\n");
-			return NULL;
+			free(ip_addr);
+			free(ip_port);
+			close(sock_fd);
+			exit(0);
 		}
 	}
+	return NULL;
 }
 
 void *print_server_outputs(void *arg) {
@@ -37,18 +42,22 @@ void *print_server_outputs(void *arg) {
       
 		if (num <= 0) {
 			printf("Either Connection Closed or Error\n");
-			return NULL;
+			free(ip_addr);
+			free(ip_port);
+			close(sock_fd);
+			exit(0);
 		}
 
 		text[num] = '\0';
 		printf("Client:Message Received From Server -  %s\n", text);
 	}
+	return NULL;
 }
 
 int main(int argc, char **argv) {
 	// SOCKET Initialization
-	char *ip_addr = get_ip();
-	char *ip_port = get_port();
+	ip_addr = get_ip();
+	ip_port = get_port();
   int s;
   sock_fd = socket(AF_INET, SOCK_STREAM, 0);
 
