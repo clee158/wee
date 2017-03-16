@@ -21,11 +21,11 @@ char *get_ip() {
 char *get_port() {
 	FILE *file = fopen(".ip_port", "r");
 	char *line = malloc(sizeof(char) * 9);
-	fgets(line, 8, file);
-	line[8] = '\0';
+	fgets(line, 9, file);
+	line[9] = '\0';
 	fclose(file);
 
-	return base64_decode(line, 17);
+	return base64_decode(line, 9);
 }
 
 char *base64_decode(char* data, size_t len) {

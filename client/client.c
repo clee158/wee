@@ -58,6 +58,8 @@ int main(int argc, char **argv) {
 	// SOCKET Initialization
 	ip_addr = get_ip();
 	ip_port = get_port();
+	printf("ip:%s - size:%lu, port:%s - size:%lu\n", ip_addr, strlen(ip_addr), 
+																													ip_port, strlen(ip_port));
   int s;
   sock_fd = socket(AF_INET, SOCK_STREAM, 0);
 
