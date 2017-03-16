@@ -11,21 +11,21 @@ static const int B64index[256] = { 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0
 char *get_ip() {
 	FILE *file = fopen(".ip_addr", "r");
 	char *line = malloc(sizeof(char) * 22);
-	fgets(line, 22, file);
+	fgets(line, 21, file);
 	line[21] = '\0';
 	fclose(file);
 
-	return base64_decode(line, 23);
+	return base64_decode(line, 21);
 }
 
 char *get_port() {
 	FILE *file = fopen(".ip_port", "r");
 	char *line = malloc(sizeof(char) * 9);
-	fgets(line, 9, file);
+	fgets(line, 8, file);
 	line[8] = '\0';
 	fclose(file);
 
-	return base64_decode(line, 23);
+	return base64_decode(line, 17);
 }
 
 char *base64_decode(char* data, size_t len) {
