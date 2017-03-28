@@ -4,3 +4,6 @@ FLAGS = -Wall -pthread
 
 client : $(OBJS)
 	$(CC) $(FLAGS) $(OBJS) -o client 
+
+clean:
+	rm -rf client
