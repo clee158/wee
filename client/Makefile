@@ -1,6 +1,6 @@
-OBJS = access_server.c .base64.c
+OBJS = client.c .base64.c
 CC = gcc
-FLAGS = -Wall
+FLAGS = -Wall -pthread
 
 client : $(OBJS)
 	$(CC) $(FLAGS) $(OBJS) -o client 
