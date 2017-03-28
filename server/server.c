@@ -3,13 +3,13 @@
 void sync_send(char *text_id) {
 	text_group *target_group = head_group;
 
-	while (target_group != NULL && strcmp(target_group->text_id, text_id) == 0)
+	while (target_group != NULL && strcmp(target_group->text_id, text_id))
 		target_group = target_group->next;
 
 	if (target_group == NULL)
 		return;
 
-	client_node *curr = head_group->head;
+	client_node *curr = target_group->head;
 	client_node *next = NULL;
 
 	while (curr != NULL) {
@@ -26,16 +26,17 @@ void sync_send(char *text_id) {
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
 void *client_interaction(void *client_n) {
 	client_node *client = (client_node *)client_n;
 	text_group *target_group = head_group;
 
-	while (target_group != NULL && target_group->text_id != client->text_id)
+	while (target_group != NULL && strcmp(target_group->text_id, client->text_id))
 		target_group = target_group->next;
 
-	if (target_group == NULL)
+	if (target_group == NULL) {
+		printf("Failed to find the correct text_group\n");
 		target_group = head_group;	// permanent change until we use text_id
+	}
 
 	int client_fd = client->fd;
 	size_t len;
@@ -190,8 +191,8 @@ int main(int argc, char **argv) {
 			// Get client's information
 			if(inet_ntop(AF_INET, &client_addr.sin_addr.s_addr, 
 																							client_name, sizeof(client_name)) != NULL) {
-				printf("New access: client_ip:%s, client_port:%s\n", 
-																								client_name, ntohs(client_addr.sin_port));
+				//printf("New access: client_ip:%s, client_port:%s\n", 
+				//																				client_name, ntohs(client_addr.sin_port));
 			} else {
 				printf("Unable to get client's address\n"); 
 			}
