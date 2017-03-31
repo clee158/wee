@@ -11,8 +11,9 @@
 #include <pthread.h>
 #include <signal.h>
 #include <arpa/inet.h>
+#include <errno.h>
 #define PORT "5555"
-
+#define TEXT_DIR "" // TODO: update as updating text directory
 /*
  *	text_id is consisted of owner + unique number (e.g. [0001][1] = 00011)
  *	When a client tries to access a text file, the server takes client_id and text file 
@@ -28,9 +29,10 @@
 // Keeps track of live clients
 typedef struct client_node {
 	pthread_t id;
+	char *ip_addr;
 	char *text_id;
 	int fd;
-	char *ip_addr;
+	uint16_t port;
 	struct client_node *next;
 } client_node;
 
@@ -38,15 +40,13 @@ typedef struct client_node {
 // Start using after text_id gets used
 typedef struct text_group {
 	char *text_id;
-	size_t size;
-	size_t start_index;
-
-	pthread_mutex_t mutex;
 	FILE *editor_fp;
-	char text[1048576]; // hold 2^20
-
-	client_node *head;
+	client_node *head_client;
+	size_t size;
+	pthread_mutex_t mutex;
 	struct text_group *next;
+	size_t start_index;
+	char text[1048576]; // hold 2^20
 } text_group;
 
 // Running is set to 1 until SIGINT tries to kill the server
@@ -56,11 +56,13 @@ text_group *head_group;
 int sock_fd;
 struct addrinfo *result;
 
-// Sends out most updated vesion of text_id
+/*
+ * Sends out most updated vesion of text_id
+ */
 void sync_send(char *text_id);
 
 /*
- * Thread starting point for accepting client inputs
+ * Thread's starting point for accepting client inputs
  * Each thread holds a client
  */
 void *client_interaction(void *client_fd);
@@ -68,10 +70,38 @@ void *client_interaction(void *client_fd);
 /*
  * SIGINT handler
  * It cleans up before exiting
+ * It joins all the running threads and deletes allocated memory
  */
 void sigint_handler();
 
 /*
- * Create a text_group and returns the pointer to it
+ * Creates a text group and returns the pointer to it
  */
-text_group *create_text_group();
+text_group *create_text_group(char *);
+
+/*
+ * Creates a client node and returns the pointer to it
+ */
+client_node *create_client_node(pthread_t, int, char *, char *, uint16_t);
+
+/*
+ * Finds the correct group and returns it.
+ * If it couldn't find one, it returns NULL
+ */
+text_group *find_text_group(char *);
+
+/*
+ * Frees all allocated memory in the client node and frees the node as well
+ * It also locates the client node in the correct text group and takes it out
+ * and takes care of the connection as it should be
+ * It is designed to be called by the client thread itself and another thread as well
+ * So it does not try to join back to the thread
+ */
+void destroy_client_node(client_node *);
+
+/*
+ * Frees all allocated memory in the text group and frees the group as well
+ * It also locates the group and takes it out
+ * and takes care of the connection as it should be
+ */
+void destroy_text_group(text_group *);

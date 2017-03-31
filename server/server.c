@@ -1,25 +1,129 @@
 #include "server.h"
 
-void sync_send(char *text_id) {
+void destroy_client_node(client_node *client) {
+	if (client == NULL)
+		return;
+
+	// Loop through the groups to find the correct group to detach current client before deleting
+	text_group *group = find_text_group(client->text_id);
+	client_node *prev_node = NULL;
+	client_node *curr_node = group->head_client;
+
+	while (curr_node) {
+		if (!strcmp(curr_node->ip_addr, client->ip_addr) && curr_node->port == client->port) {
+			// Correctly connect
+			if (prev_node)
+				prev_node->next = curr_node->next;
+			else
+				group->head_client = curr_node->next;
+
+			curr_node->next = NULL;
+
+			// Free allocated memories
+			if (client->ip_addr != NULL) {
+				free(client->ip_addr);
+				client->ip_addr = NULL;
+			}
+
+			if (client->text_id != NULL) {
+				free(client->text_id);
+				client->text_id = NULL;
+			}
+		
+			// Close open fd
+			if (client->fd != -1)
+				close(client->fd);
+
+			free(client);
+			break;
+		}
+
+		prev_node = curr_node;
+		curr_node = curr_node->next;
+	}
+}
+
+void destroy_text_group(text_group *group) {
+	if (group == NULL)
+		return;
+	
+	// Loop through to find the correct group to delete for connecting groups 
+	text_group *prev_group = NULL;
+	text_group *curr_group = head_group;
+
+	while (curr_group) {
+		if (!strcmp(group->text_id, curr_group->text_id)) {	// found it!
+			// Correctly connect each other
+			if (prev_group)
+				prev_group->next = curr_group->next;
+			else
+				head_group = curr_group->next;
+
+			// Free its client nodes
+			if (curr_group->head_client != NULL) {
+				client_node *curr_node = curr_group->head_client;
+				client_node *next_node = NULL;
+
+				while (curr_node) {
+					next_node = curr_node->next;
+					destroy_client_node(curr_node);
+					curr_node = next_node;
+				}
+			}
+
+			// Free allocated memories
+			if (group->text_id != NULL) {
+				free(group->text_id);
+				group->text_id = NULL;
+			}
+	
+			// Close open file pointer
+			if (group->editor_fp != NULL) {
+				if(fclose(group->editor_fp) == EOF) {
+					perror(strerror(errno));
+				}
+			}
+			
+			break;
+		}
+
+		prev_group = curr_group;
+		curr_group = curr_group->next;
+	}
+}
+
+text_group *find_text_group(char *text_id) {
 	text_group *target_group = head_group;
 
 	while (target_group != NULL && strcmp(target_group->text_id, text_id))
 		target_group = target_group->next;
 
-	if (target_group == NULL)
-		return;
+	if (target_group == NULL) {
+		perror("Failed to find the correct text_group\n");
+		return NULL;
+	}
 
-	client_node *curr = target_group->head;
+	return target_group;
+}
+
+void sync_send(char *text_id) {
+	// Find the target group
+	text_group *target_group = find_text_group(text_id);
+	
+	// Loop through current target_group's nodes to send the updated message 
+	client_node *curr = target_group->head_client;
 	client_node *next = NULL;
 
+	printf("updated text_group: %s\n", text_id);
 	while (curr != NULL) {
+		printf("To client:%s:%d\n", curr->ip_addr, curr->port);
+
 		next = curr->next;
 
-		printf("sending message to %lu\n", curr->id);
-		printf("next is NULL: %d\n", next == NULL);
-
+		// Send message to the target client
 		if ((send(curr->fd, head_group->text, strlen(head_group->text), 0)) == -1) {
-			printf("Failed to send result to %d\n", curr->fd);
+			printf("Failed to send result to %s:%d\n", curr->ip_addr, curr->port);
+			perror(strerror(errno));
 		}
 
 		curr = next;
@@ -28,36 +132,29 @@ void sync_send(char *text_id) {
 
 void *client_interaction(void *client_n) {
 	client_node *client = (client_node *)client_n;
-	text_group *target_group = head_group;
+	
+	// Find the target group
+	text_group *target_group = find_text_group(client->text_id);
 
-	while (target_group != NULL && strcmp(target_group->text_id, client->text_id))
-		target_group = target_group->next;
-
-	if (target_group == NULL) {
-		printf("Failed to find the correct text_group\n");
-		target_group = head_group;	// permanent change until we use text_id
-	}
-
-	int client_fd = client->fd;
 	size_t len;
 	char buffer[1000];
 
+	// Listen to any upcoming client communication
 	while (1) {
-		if ((len = read(client_fd, buffer, 1000 - 1)) == -1) {
-			perror("recv");
+		if ((len = read(client->fd, buffer, 1000 - 1)) == -1) {
+			perror(strerror(errno));
 			exit(1);
-		} 
-		else if (len == 0) {
-			// Join back with the original thread
-			printf("%d: Connection closed\n", client_fd);
+		} else if (len == 0) {				// Join back with the original thread
+			printf("Connection closed: %s:%d\n", client->ip_addr, client->port);
+			destroy_client_node(client);	
 			pthread_exit(NULL);
 			break;
 		} 
 
 	  buffer[len] = '\0';
-
+		
 		// CRITICAL SECTION STARTED  --------------------------------------
-		// : editing current temp.txt and applying the change to text
+		// Editing current temp.txt and applying the change to group's text
 		pthread_mutex_lock(&target_group->mutex);
 		fprintf(target_group->editor_fp, "%s", buffer);
 		
@@ -65,14 +162,13 @@ void *client_interaction(void *client_n) {
 		for (; curr < target_group->start_index + strlen(buffer); curr++)	
 			target_group->text[curr] = buffer[curr - target_group->start_index];
 
+		target_group->text[curr] = '\0';
 		target_group->start_index = strlen(target_group->text);
-
 		sync_send(client->text_id);
-
 		pthread_mutex_unlock(&target_group->mutex);
 		// CRITICAL SECTION FINISHED --------------------------------------
 
-		printf("%d -  Msg sent: %s\n", client_fd, target_group->text);
+		printf("Message:\n%s", target_group->text);
 	}
 }
 
@@ -87,7 +183,7 @@ void sigint_handler() {
 
 	while (curr_group != NULL) {
 		next_group = curr_group->next;
-		curr_node = curr_group->head;
+		curr_node = curr_group->head_client;
 		
 		while (curr_node != NULL) {
 			next_node = curr_node->next;
@@ -117,18 +213,45 @@ void sigint_handler() {
 	exit(EXIT_SUCCESS);
 }
 
-text_group *create_text_group() {
+client_node *create_client_node(pthread_t new_user_thread, int client_fd, char *client_ip, 
+																														char *text_id, uint16_t port) {
+	client_node *new_node = malloc(sizeof(client_node));
+	new_node->id = new_user_thread;
+	new_node->fd = client_fd;
+	new_node->ip_addr = strdup(client_ip);
+	new_node->text_id = strdup(text_id);
+	new_node->port = port;
+	new_node->next = NULL;
+
+	return new_node;
+}
+
+text_group *create_text_group(char *text_id) {
 	text_group *new_group = malloc(sizeof(text_group));
-	new_group->text_id = 0;
+
+	new_group->text_id = strdup(text_id);
 	new_group->size = 0;
-	new_group->start_index = 0;
-
-	new_group->mutex = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
-	new_group->editor_fp = fopen("00011", "a+"); // need to fix when we start using text_id
-	new_group->text[0] = '\0';
-
-	new_group->head = NULL;
+	new_group->head_client = NULL;
 	new_group->next = NULL;
+	new_group->mutex = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
+
+	//printf("is text_id %s available? %d\n", text_id, access(text_id, F_OK));
+	if (access(text_id, F_OK) == 0) {
+		new_group->editor_fp = fopen(text_id, "r");
+		int c;
+		size_t index = 0;
+
+		while ((c = fgetc(new_group->editor_fp)) != EOF)
+			new_group->text[index++] = c;
+	
+		fclose(new_group->editor_fp);
+		new_group->editor_fp = fopen(text_id, "a");
+		new_group->start_index = strlen(new_group->text);
+	} else {
+		new_group->editor_fp = fopen(text_id, "w+"); // TODO: need to fix when we start using text_id
+		new_group->text[0] = '\0';
+		new_group->start_index = 0;
+	}
 
 	return new_group;
 }
@@ -136,8 +259,7 @@ text_group *create_text_group() {
 int main(int argc, char **argv) {
 	running = 1;
 	signal(SIGINT, sigint_handler);
-	head_group = create_text_group();
-	head_group->text_id = strdup("00011");     // TEMP: when start using text_id, remove it
+	head_group = create_text_group("00011");
 
 	// Socket initialization
 	int sock_status;
@@ -186,41 +308,35 @@ int main(int argc, char **argv) {
 			exit(1);
 		} else {
 			// Grabbing client's ip addr
-			char client_name[INET_ADDRSTRLEN];
+			char client_ip[INET_ADDRSTRLEN];
 
 			// Get client's information
 			if(inet_ntop(AF_INET, &client_addr.sin_addr.s_addr, 
-																							client_name, sizeof(client_name)) != NULL) {
-				//printf("New access: client_ip:%s, client_port:%s\n", 
-				//																				client_name, ntohs(client_addr.sin_port));
+																							client_ip, sizeof(client_ip)) != NULL) {
+				printf("New access: client_ip:%s, client_port:%d\n", 
+																								client_ip, ntohs(client_addr.sin_port));
 			} else {
 				printf("Unable to get client's address\n"); 
 			}
 
 			pthread_t new_user_thread;
 			
-			client_node *new_node = malloc(sizeof(client_node));
-			new_node->id = new_user_thread;
-			new_node->fd = client_fd;
-			new_node->ip_addr = strdup(client_name);
-			new_node->text_id = strdup("00011");
-			new_node->next = NULL;
+			client_node *new_node = create_client_node(new_user_thread, client_fd, client_ip, 
+																								 "00011", ntohs(client_addr.sin_port));
 
 			if (pthread_create(&new_user_thread, NULL, client_interaction, new_node)) {
-				printf("Connection failed with client_fd=%d\n", client_fd);
+				printf("Connection failed with client=%s:%d\n", client_ip, 
+																											ntohs(client_addr.sin_port));
 
-				free(new_node->ip_addr);
-				free(new_node);
+				destroy_client_node(new_node);
 			} else {
 				// When start using text_id, put right client_node into correct text_group
-				if (head_group->head == NULL)
-					head_group->head = new_node;
+				if (head_group->head_client == NULL)
+					head_group->head_client = new_node;
 				else {
-					new_node->next = head_group->head;
-					head_group->head = new_node;
+					new_node->next = head_group->head_client;
+					head_group->head_client = new_node;
 				}
-
-				printf("Connection made: client_ip:%s, client_fd=%d\n", client_name, client_fd);
 			}
 		}
 	}
