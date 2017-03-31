@@ -1,6 +1,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -17,8 +19,29 @@ typedef struct thread_node {
 
 static int running;
 thread_node *head;
+int start_index;
 int sock_fd;
+FILE *editor_fp;
 struct addrinfo hints, *result;
+pthread_mutex_t mutex;
+char text[1048576]; // hold 2^20
+
+void sync_send() {
+	thread_node *curr = head->next;
+	thread_node *next = NULL;
+
+	while (curr != NULL) {
+		next = curr->next;
+
+		printf("sending message to %lu\n", curr->thread_id);
+		printf("next is NULL: %d\n", next == NULL);
+		if ((send(curr->client_fd, text, strlen(text), 0)) == -1) {
+			printf("Failed to send result to %d\n", curr->client_fd);
+		}
+
+		curr = next;
+	}
+}
 
 void *client_interaction(void *client_fd) {
 	int client = *((int *) client_fd);
@@ -29,37 +52,40 @@ void *client_interaction(void *client_fd) {
 		if ((len = read(client, buffer, 1000 - 1)) == -1) {
 			perror("recv");
 			exit(1);
-		}
+		} 
 		else if (len == 0) {
 			// Join back with the original thread
+			printf("%d: Connection closed\n", client);
 			pthread_exit(NULL);
-			printf("Connection closed\n");
 			break;
-		}
+		} 
 
 	  buffer[len] = '\0';
-		printf("Server:Msg Received %s\n", buffer);
-	  printf("===\n");
 
-		int n;
+		// CRITICAL SECTION STARTED  --------------------------------------
+		// : editing current temp.txt and applying the change to text
+		pthread_mutex_lock(&mutex);
+		fprintf(editor_fp, "%s", buffer);
+		
+		// read texts in the temp.txt
+		int curr = start_index;
+		for (; curr < start_index + strlen(buffer); curr++)	
+			text[curr] = buffer[curr - start_index];
 
-		for (n = 0; n < strlen(buffer); n++)
-			buffer[n] = buffer[n] + 1;
+		start_index = strlen(text);
 
-		if ((send(client, buffer, strlen(buffer), 0)) == -1) {
-			// Join back with the original thread
-			pthread_exit(NULL);
-			fprintf(stderr, "Failure Sending Message\n");
-			close(client);
-			break;
-		}
+		sync_send();
 
-		printf("Msg sent: %s\n", buffer);
+		pthread_mutex_unlock(&mutex);
+		// CRITICAL SECTION FINISHED --------------------------------------
+
+		printf("%d -  Msg sent: %s\n", client, text);
 	}
 }
 
 void sigint_handler() {
 	printf("Cleaning up before exiting...\n");
+
 	running = 0;
 	thread_node *curr = head;
 	thread_node *next = NULL;
@@ -76,10 +102,16 @@ void sigint_handler() {
 
 	free(result);
 	close(sock_fd);
+	fclose(editor_fp);
+	pthread_mutex_destroy(&mutex);
 	exit(EXIT_SUCCESS);
 }
 
 int main(int argc, char **argv) {
+	start_index = 0;
+	text[0] = '\0';
+	pthread_mutex_init(&mutex, NULL);
+	editor_fp = fopen("temp.txt", "a+");
 	running = 1;
 	signal(SIGINT, sigint_handler);
 	head = malloc(sizeof(thread_node));
@@ -134,8 +166,8 @@ int main(int argc, char **argv) {
 				new_node->thread_id = new_user;
 				new_node->client_fd = client_fd;
 				curr_node->next = new_node;
-
-				printf("Connection made: client_fd=%d\n", client_fd);
+				curr_node = new_node;
+				printf("Connection made: client_fd=%d, thread:%lu\n", client_fd, new_user);
 			}
 		}
 	}
