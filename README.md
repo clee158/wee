@@ -15,18 +15,18 @@ wee is a command line multi-user interactive text editor.
 - Command-based interface
 
 # Schedule
-|      |Joseph                           |Elena                                     |
-|:-----|:--------------------------------|:-----------------------------------------|
-|  3/1 |Launch Server				             |Develop text editor interface             |
-|  3/8 |Networking with the server       |Develop text editor interface             |
-|  3/15|Develop text editor interface    |Develop text editor interface             |
-|  3/22|Develop text editor interface    |Single-user networking with the server    |
-|  3/29|Develop text editor interface    |Multi-user networking with the same server|
-|  4/5 |Real-time networking while on wee|Real-time networking while on wee         |
-|  4/12|Concurrency                      |Concurrency                               |
-|  4/19|Debugging                        |Debugging                                 |
-|  4/26|Final wrap up                    |Final wrap up                             |
--------------------------------------------------------------------------------------
+|      |Joseph																		|Elena																														 |
+|:-----|:-----------------------------------------|:-----------------------------------------------------------------|
+|  3/1 |Launch Server															|Develop text editor interface																		 |
+|  3/8 |Networking with the server								|Develop text editor interface																		 |
+|  3/15|Single-user networking with the server		|Develop text editor interface																		 |
+|  3/22|Single-user networking with the server		|Develop text editor interface																		 |
+|  3/29|Multi-user networking with the same server|Develop text editor interface																		 |
+|  4/5 |Real-time networking while on wee					|Finish up text editor interface/ Real-time networking while on wee|
+|  4/12|Concurrency																|Concurrency																											 |
+|  4/19|Debugging																	|Debugging																											   |
+|  4/26|Final wrap up															|Final wrap up																										 |
+----------------------------------------------------------------------------------------------------------------------
 
 # Research results
 Elena
