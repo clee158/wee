@@ -5,11 +5,11 @@ SRC = $(wildcard $(SRC_DIR)/*.c)
 OBJ = $(patsubst $(SRC_DIR)/%.c, $(OBJS_DIR)/%.o, $(SRC))
 EXE = weeditor
 
-CC = clang-3.5
+CC = clang
 WARNINGS = -Wall -Wextra -Werror -Wno-error=unused-parameter
 CFLAGS = $(WARNINGS) -g -c 
-LD = clang-3.5
-LDFLAGS = -lncurses -Llibs/ -lprovided
+LD = clang
+LDFLAGS = -lncurses
 
 .PHONY: all
 all: $(EXE)
