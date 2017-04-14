@@ -10,13 +10,16 @@ int main(int argc, char* argv[]){
 	else
 		wee = create_editor_no_file();
 
-	// initialize curses
 	init_scr();
 	
-	char mode;
-	while((mode = get_mode(wee)) != 'q'){
-		// do text editor stuff
-		int ch = getch();
+	int ch = 0;
+	//char mode = 0;
+	while(ch != 27){
+		//handle_mode(wee);
+		ch = getch();
+		handle_input(wee, ch);
+		if(ch != 27)
+			print_document(wee);
 	}
 
 	refresh();
