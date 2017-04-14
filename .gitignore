@@ -2,3 +2,4 @@
 server/server
 client/client
 server/00011
+editor/obj/*.o
