@@ -45,3 +45,5 @@ Joseph
 	- The key here is that all accessed users should be able to see the real-time editing
 		and to edit in real-time 
 	- diff would be used effectiely
+
+![Rough Draft Scheme](https://github.com/clee158/wee/blob/master/scheme.jpeg)
