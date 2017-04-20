@@ -13,6 +13,8 @@ editor* create_editor_file(char *filename);
 
 void init_scr();
 
+char get_editor_mode(editor *editor);
+
 void handle_mode(editor *editor);
 
 void handle_input(editor* editor, int ch);
@@ -24,5 +26,9 @@ void move_up();
 void move_left();
 
 void move_right();
+
+void print_state(editor *editor);
+
+void print_document(editor *editor);
 
 void cleanup(editor* editor);

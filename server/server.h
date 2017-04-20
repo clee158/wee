@@ -46,7 +46,6 @@ typedef struct text_group {
 	pthread_mutex_t mutex;
 	struct text_group *next;
 	size_t start_index;
-	char text[1048576]; // hold 2^20
 } text_group;
 
 // Running is set to 1 until SIGINT tries to kill the server

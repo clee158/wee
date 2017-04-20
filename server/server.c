@@ -114,16 +114,16 @@ void sync_send(char *text_id) {
 	client_node *curr = target_group->head_client;
 	client_node *next = NULL;
 
-	printf("updated text_group: %s\n", text_id);
+	fprintf(stderr, "updated text_group: %s\n", text_id);
 	while (curr != NULL) {
-		printf("To client:%s:%d\n", curr->ip_addr, curr->port);
+		fprintf(stderr, "To client:%s:%d\n", curr->ip_addr, curr->port);
 
 		next = curr->next;
 
 		// Send message to the target client
 		if ((send(curr->fd, head_group->text, strlen(head_group->text), 0)) == -1) {
-			printf("Failed to send result to %s:%d\n", curr->ip_addr, curr->port);
-			perror(strerror(errno));
+			fprintf(stderr, "Failed to send result to %s:%d\n", curr->ip_addr, curr->port);
+			perror("send():");
 		}
 
 		curr = next;
@@ -131,6 +131,12 @@ void sync_send(char *text_id) {
 }
 
 void *client_interaction(void *client_n) {
+	// Deatching itself from the main thread
+	int detach_status = pthread_detach(pthread_self());
+	if (detach_status) {
+		perror("pthread_detach():");
+	}
+
 	client_node *client = (client_node *)client_n;
 	
 	// Find the target group
@@ -141,39 +147,44 @@ void *client_interaction(void *client_n) {
 
 	// Listen to any upcoming client communication
 	while (1) {
-		if ((len = read(client->fd, buffer, 1000 - 1)) == -1) {
-			perror(strerror(errno));
-			exit(1);
+		if ((len = read(client->fd, target_group->text, 1000 - 1)) == -1) {
+		//if ((len = read(client->fd, buffer, 1000 - 1)) == -1) {
+			perror("read():");
+			exit(EXIT_FAILURE);
 		} else if (len == 0) {				// Join back with the original thread
-			printf("Connection closed: %s:%d\n", client->ip_addr, client->port);
+			fprintf(stderr, "Connection closed: %s:%d\n", client->ip_addr, client->port);
 			destroy_client_node(client);	
 			pthread_exit(NULL);
 			break;
-		} 
+		}
 
-	  buffer[len] = '\0';
+	  //buffer[len] = '\0';
 		
 		// CRITICAL SECTION STARTED  --------------------------------------
 		// Editing current temp.txt and applying the change to group's text
 		pthread_mutex_lock(&target_group->mutex);
-		fprintf(target_group->editor_fp, "%s", buffer);
+		target_group->text[len] = '\0';
+		fprintf(target_group->editor_fp, "%s", target_group->text);
+		//fprintf(target_group->editor_fp, "%s", buffer);
 		
+		/*
 		int curr = target_group->start_index;
 		for (; curr < target_group->start_index + strlen(buffer); curr++)	
 			target_group->text[curr] = buffer[curr - target_group->start_index];
+		*/
 
-		target_group->text[curr] = '\0';
-		target_group->start_index = strlen(target_group->text);
+		//target_group->text[curr] = '\0';
+		//target_group->start_index = strlen(target_group->text);
 		sync_send(client->text_id);
 		pthread_mutex_unlock(&target_group->mutex);
 		// CRITICAL SECTION FINISHED --------------------------------------
 
-		printf("Message:\n%s", target_group->text);
+		fprintf(stderr, "Message:\n%s", target_group->text);
 	}
 }
 
 void sigint_handler() {
-	printf("Cleaning up before exiting...\n");
+	fprintf(stderr, "Cleaning up before exiting...\n");
 
 	running = 0;
 	text_group *curr_group = head_group;
@@ -264,32 +275,32 @@ int main(int argc, char **argv) {
 	// Socket initialization
 	int sock_status;
 	struct addrinfo sock_hints;
-  sock_fd = socket(AF_INET, SOCK_STREAM, 0);
   memset(&sock_hints, 0, sizeof(struct addrinfo));
   sock_hints.ai_family = AF_INET;
   sock_hints.ai_socktype = SOCK_STREAM;
   sock_hints.ai_flags = AI_PASSIVE;
+  sock_fd = socket(sock_hints.ai_family, sock_hints.ai_socktype, 0);
   sock_status = getaddrinfo(NULL, PORT, &sock_hints, &result);
 
   if (sock_status != 0) {
 	  fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(sock_status));
-    exit(1);
+    exit(EXIT_FAILURE);
 	}
 
 	// Socket setting with option
 	int optval = 1;
-	setsockopt(sock_fd, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+	setsockopt(sock_fd, SOL_SOCKET, SO_REUSEPORT | SO_REUSEADDR, &optval, sizeof(optval));
 
 	// If bind fails, exit
   if (bind(sock_fd, result->ai_addr, result->ai_addrlen) != 0) {
-	 perror("bind()");
-   exit(1);
+	 perror("bind():");
+   exit(EXIT_FAILURE);
   }
 
 	// If listen fails, exit
-	if (listen(sock_fd, 10) != 0) {
-		perror("listen()");
-	  exit(1);
+	if (listen(sock_fd, 100) != 0) {
+		perror("listen():");
+	  exit(EXIT_FAILURE);
 	}
 	
 	// Socket configuration done.  Listning, binding check finished.
@@ -298,14 +309,14 @@ int main(int argc, char **argv) {
 	struct sockaddr_in client_addr;
 	socklen_t addr_size;
 	addr_size = sizeof(client_addr);
-	printf("Listening on file descriptor %d, port %d\n", sock_fd, ntohs(result_addr->sin_port));
+	fprintf(stderr, "Listening on file descriptor %d, port %d\n", sock_fd, ntohs(result_addr->sin_port));
 	
 	int client_fd;
 
 	while (running) {
 		if ((client_fd = accept(sock_fd, (struct sockaddr *)&client_addr, &addr_size)) == -1) {
-			perror("client_accept_error");
-			exit(1);
+			perror("accept():");
+			exit(EXIT_FAILURE);
 		} else {
 			// Grabbing client's ip addr
 			char client_ip[INET_ADDRSTRLEN];
@@ -313,10 +324,10 @@ int main(int argc, char **argv) {
 			// Get client's information
 			if(inet_ntop(AF_INET, &client_addr.sin_addr.s_addr, 
 																							client_ip, sizeof(client_ip)) != NULL) {
-				printf("New access: client_ip:%s, client_port:%d\n", 
+				fprintf(stderr, "New access: client_ip:%s, client_port:%d\n", 
 																								client_ip, ntohs(client_addr.sin_port));
 			} else {
-				printf("Unable to get client's address\n"); 
+				fprintf(stderr, "Unable to get client's address\n"); 
 			}
 
 			pthread_t new_user_thread;
@@ -325,7 +336,7 @@ int main(int argc, char **argv) {
 																								 "00011", ntohs(client_addr.sin_port));
 
 			if (pthread_create(&new_user_thread, NULL, client_interaction, new_node)) {
-				printf("Connection failed with client=%s:%d\n", client_ip, 
+				fprintf(stderr, "Connection failed with client=%s:%d\n", client_ip, 
 																											ntohs(client_addr.sin_port));
 
 				destroy_client_node(new_node);
