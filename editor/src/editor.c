@@ -61,6 +61,8 @@ void init_scr(){
 	noecho();
 	cbreak();
 	keypad(stdscr, TRUE);
+	scrollok(stdscr, FALSE);
+	idlok(stdscr, TRUE);
 }
 
 char get_editor_mode(editor *editor){
@@ -299,7 +301,7 @@ void handle_input(editor *editor, int ch){
 void move_down(editor *editor){
 	//if((editor->curr_y + 1 < LINES - 1) && (editor->curr_y + 1 < (int)document_size(doc))){
 	if(editor->curr_y + 1 < (int)document_size(doc) 
-			&& (editor->curr_x + 1 <= (int)strlen(document_get_line(doc, editor->curr_y + 2)))){	
+			&& (editor->curr_x <= (int)strlen(document_get_line(doc, editor->curr_y + 2)))){	
 		editor->curr_y += 1;
 		move(editor->curr_y, editor->curr_x);
 	}
@@ -308,7 +310,7 @@ void move_down(editor *editor){
 void move_up(editor *editor){
 	// moving up decreases y
 	if((editor->curr_y - 1) >= 0 && 
-			(editor->curr_x + 1 <= (int)strlen(document_get_line(doc, editor->curr_y)))){
+			(editor->curr_x <= (int)strlen(document_get_line(doc, editor->curr_y)))){
 		editor->curr_y -= 1;
 		move(editor->curr_y, editor->curr_x);
 	}
