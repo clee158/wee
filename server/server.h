@@ -12,8 +12,11 @@
 #include <signal.h>
 #include <arpa/inet.h>
 #include <errno.h>
+
+#include "queue.h"
+
 #define PORT "5555"
-#define TEXT_DIR "" // TODO: update as updating text directory
+
 /*
  *	text_id is consisted of owner + unique number (e.g. [0001][1] = 00011)
  *	When a client tries to access a text file, the server takes client_id and text file 
@@ -26,7 +29,10 @@
  *			when there is any change.
  */
 
-// Keeps track of live clients
+/**
+ * Structures
+ */
+
 typedef struct client_node {
 	pthread_t id;
 	char *ip_addr;
@@ -36,21 +42,26 @@ typedef struct client_node {
 	struct client_node *next;
 } client_node;
 
-// Keeps track of groups of live clients on different text_id
-// Start using after text_id gets used
 typedef struct text_group {
+	queue *queue;
+	pthread_t sync_sender;
+	pthread_mutex_t mutex;
+	pthread_cond_t cond;
+	size_t queue_size;
 	char *text_id;
-	FILE *editor_fp;
 	client_node *head_client;
 	size_t size;
-	pthread_mutex_t mutex;
 	struct text_group *next;
-	size_t start_index;
 } text_group;
+
+typedef struct sync_send_data_packet {
+	text_group *target_group;
+	char *data;
+} sync_send_packet;
 
 // Running is set to 1 until SIGINT tries to kill the server
 int running;
-
+pthread_mutex running_mutex;
 text_group *head_group;
 int sock_fd;
 struct addrinfo *result;
