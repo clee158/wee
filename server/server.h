@@ -13,7 +13,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 
-#include "queue.h"
+#include "../libs/queue.h"
 
 #define PORT "5555"
 
@@ -45,8 +45,8 @@ typedef struct client_node {
 typedef struct text_group {
 	queue *queue;
 	pthread_t sync_sender;
-	pthread_mutex_t mutex;
-	pthread_cond_t cond;
+	pthread_mutex_t size_mutex;
+	pthread_cond_t size_cond;
 	size_t queue_size;
 	char *text_id;
 	client_node *head_client;
@@ -57,11 +57,11 @@ typedef struct text_group {
 typedef struct sync_send_data_packet {
 	text_group *target_group;
 	char *data;
-} sync_send_packet;
+} sync_send_data_packet;
 
 // Running is set to 1 until SIGINT tries to kill the server
-int running;
-pthread_mutex running_mutex;
+int running = 1;
+pthread_mutex_t running_mutex;
 text_group *head_group;
 int sock_fd;
 struct addrinfo *result;
@@ -69,13 +69,13 @@ struct addrinfo *result;
 /*
  * Sends out most updated vesion of text_id
  */
-void sync_send(char *text_id);
+void *sync_send(void *);
 
 /*
  * Thread's starting point for accepting client inputs
  * Each thread holds a client
  */
-void *client_interaction(void *client_fd);
+void *client_interaction(void *);
 
 /*
  * SIGINT handler
@@ -115,3 +115,11 @@ void destroy_client_node(client_node *);
  * and takes care of the connection as it should be
  */
 void destroy_text_group(text_group *);
+
+/**
+ * Runs TCP server through socket, getaddrinfo, bind, listen
+ */
+void run_server();
+
+void *data_packet_copy_constructor(void *);
+void data_packet_destructor(void *);
