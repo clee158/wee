@@ -1,32 +1,26 @@
-OBJS_DIR = obj
-SRC_DIR = src
+OBJS = callbacks.o vector.o queue.o document.o editor.o main.o
+CC = clang 
+FLAGS = -lncurses -Wall -Wextra -Werror -Wno-error=unused-parameter
+LIBS_DIR = ../libs
 
-SRC = $(wildcard $(SRC_DIR)/*.c)
-OBJ = $(patsubst $(SRC_DIR)/%.c, $(OBJS_DIR)/%.o, $(SRC))
-EXE = weeditor
+editor: $(OBJS)
+	$(CC) $(FLAGS) $(OBJS) -o editor
+	rm -f *.o
 
-CC = clang
-WARNINGS = -Wall -Wextra -Werror -Wno-error=unused-parameter
-CFLAGS = $(WARNINGS) -g -c 
-LD = clang
-LDFLAGS = -lncurses
+callbacks.o: ../libs/callbacks.c
+	$(CC) -c ../libs/callbacks.c
 
-.PHONY: all
-all: $(EXE)
+vector.o: src/vector.c
+	$(CC) -c src/vector.c
 
-.PHONY: clean
-clean:
-	rm -f $(OBJ)
-	rm -f $(EXE)
+queue.o: ../libs/queue.c
+	$(CC) -c ../libs/queue.c
 
-$(EXE): $(OBJS_DIR) $(OBJ)
-	$(LD) $(OBJ) $(LDFLAGS) -o $@
+document.o: src/document.c
+	$(CC) -c src/document.c
 
-$(OBJS_DIR):
-	mkdir $@
+editor.o: src/editor.c
+	$(CC) -c src/editor.c
 
-$(OBJS_DIR)/%.o: $(SRC_DIR)/%.c
-	$(CC) $(CFLAGS) $< -o $@
-
-$(OBJS_DIR)/%.o: $(SRC_DIR)/%.c $(SRC_DIR)/%.h
-	$(CC) $(CFLAGS) $< -o $@
+main.o: src/main.c
+	$(CC) -c src/main.c
