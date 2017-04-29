@@ -15,9 +15,13 @@ void init_scr();
 
 char get_editor_mode(editor *editor);
 
+int get_curr_x(editor *editor);
+
+int get_curr_y(editor *editor);
+
 void handle_mode(editor *editor);
 
-void handle_input(editor* editor, int ch);
+void handle_input(editor* editor, int ch, int x, int y);
 
 void move_down();
 
