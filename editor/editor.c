@@ -70,6 +70,16 @@ char get_editor_mode(editor *editor){
 	//return editor->mode;
 }
 
+
+int get_curr_x(editor *editor){
+	return editor->curr_x;
+}
+
+int get_curr_y(editor *editor){
+	return editor->curr_y;
+}
+
+
 /* 
  *	Handles modes (d, i, s)
  */
@@ -89,25 +99,29 @@ void handle_mode(editor *editor){
 	}*/
 }
 
-void handle_input(editor *editor, int ch){
+void handle_input(editor *editor, int ch, int x, int y){
 	char *str = NULL;
-	if(document_size(doc) > 0)
-		str = strdup(document_get_line(doc, editor->curr_y + 1));
+	if(document_size(doc) > 0 && y < document_size(doc))
+		str = strdup(document_get_line(doc, y + 1));
 	char new_char[2];
 	*new_char = (char)ch;
 	new_char[1] = '\0';
 	switch(ch){
 		case KEY_DOWN:
-			move_down(editor);
+			if(x == editor->curr_x && y == editor->curr_y)
+				move_down(editor);
 			break;
 		case KEY_UP:
-			move_up(editor);
+			if(x == editor->curr_x && y == editor->curr_y)
+				move_up(editor);
 			break;
 		case KEY_LEFT:
-			move_left(editor);
+			if(x == editor->curr_x && y == editor->curr_y)
+				move_left(editor);
 			break;
 		case KEY_RIGHT:
-			move_right(editor);
+			if(x == editor->curr_x && y == editor->curr_y)
+				move_right(editor);
 			break;
 	/*}
 
@@ -136,83 +150,114 @@ void handle_input(editor *editor, int ch){
 					//editor->mode = 'd';
 					break;
 				case KEY_BACKSPACE:
-					if(editor->curr_x > 0){
+					// i. normal backspace
+					if(str && x > 0){
 						// copy first half
 						char temp[strlen(str) + 1];
-						strncpy(temp, str, editor->curr_x - 1);
-						temp[editor->curr_x - 1] = '\0';
+						strncpy(temp, str, x - 1);
+						temp[x - 1] = '\0';
 						// copy second half
-						strncat(temp, str + editor->curr_x, strlen(str) - editor->curr_x);
+						strncat(temp, str + x, strlen(str) - x);
 						// insert into document
-						document_set_line(doc, editor->curr_y + 1, temp);
-						// update x
-						editor->curr_x -= 1;
-						move(editor->curr_y, editor->curr_x);
+						document_set_line(doc, y + 1, temp);
+						// update curr_x
+						if(editor->curr_y == y && ((editor->curr_x >= x) || 
+									(editor->curr_x + 1 == x && editor->curr_x >= strlen(str) - 1)))
+							editor->curr_x -= 1;
 					}
-					// need to merge with previous line!
-					else if(editor->curr_x == 0 && editor->curr_y > 0){
-						const char *prev_line = document_get_line(doc, editor->curr_y);
+					// ii. need to merge with previous line!
+					else if(str && x == 0 && y > 0){
+						const char *prev_line = document_get_line(doc, y);
 						if(strlen(str) > 0){
 							char new_str[strlen(prev_line) + strlen(str) + 1];
 							strcpy(new_str, prev_line);
-							editor->curr_x = strlen(prev_line);
 							// merge
 							strcat(new_str, str);
 							// set line
-							document_set_line(doc, editor->curr_y, new_str);
+							document_set_line(doc, y, new_str);
 						}
-						else
-							editor->curr_x = strlen(prev_line);
 
-						document_delete_line(doc, editor->curr_y + 1);
-						editor->curr_y -= 1;
-						move(editor->curr_y, editor->curr_x);
+						if(editor->curr_y == y){
+							if(editor->curr_x == x)
+								editor->curr_x = strlen(prev_line);
+							else if(editor->curr_x > x)
+								editor->curr_x += strlen(prev_line);
+						}
+						document_delete_line(doc, y + 1);
+						if(editor->curr_y >= y)
+							editor->curr_y -= 1;
 					}
+					move(editor->curr_y, editor->curr_x);
 					break;
 				case KEY_DC:
-					// merge with next line
-					if(editor->curr_x >= (int)strlen(str) && editor->curr_y + 1 < (int)document_size(doc)){
+					// i. merge with next line
+					if(str && x >= (int)strlen(str) && y + 1 < (int)document_size(doc)){
 						// concatenate
-						const char *prev_line = document_get_line(doc, editor->curr_y + 2);
-						char new_str[strlen(str) + strlen(prev_line) + 1];
+						const char *next_line = document_get_line(doc, y + 2);
+						char new_str[strlen(str) + strlen(next_line) + 1];
 						strcpy(new_str, str);
-						strcat(new_str, prev_line);
+						strcat(new_str, next_line);
 						// set line
-						document_set_line(doc, editor->curr_y + 1, new_str);
+						document_set_line(doc, y + 1, new_str);
+						// update coords
+						if(editor->curr_y == y + 1){
+							editor->curr_x += strlen(str);
+							editor->curr_y = y;
+						}
 						// remove next line
-						document_delete_line(doc, editor->curr_y + 2);
+						document_delete_line(doc, y + 2);
 					}
-					else if(strlen(str) > 0 && editor->curr_x < (int)strlen(str)){
+					// ii. just delete
+					else if(str && strlen(str) > 0 && x < (int)strlen(str)){
 						// copy first half
 						char new_str[strlen(str)];
-						strncpy(new_str, str, editor->curr_x);
-						new_str[editor->curr_x] = '\0';
+						strncpy(new_str, str, x);
+						new_str[x] = '\0';
 						// copy second half
-						strcat(new_str, str + editor->curr_x + 1);
+						strcat(new_str, str + x + 1);
 						// set line
-						document_set_line(doc, editor->curr_y + 1, new_str);
+						document_set_line(doc, y + 1, new_str);
+						// update coords
+						if(editor->curr_y == y && editor->curr_x > x)
+							editor->curr_x -= 1;
 					}
 					break;
 				case 10:
 				case KEY_ENTER:
-					if(editor->curr_x < (int)strlen(str)){
+					// i. non-empty line
+					if(str && x < (int)strlen(str)){
 						// modify original line
 						char new_str[strlen(str) + 1];
-						strncpy(new_str, str, editor->curr_x);
-						new_str[editor->curr_x] = '\0';
-						document_set_line(doc, editor->curr_y + 1, new_str);
+						strncpy(new_str, str, x);
+						new_str[x] = '\0';
+						document_set_line(doc, y + 1, new_str);
 						// insert second part of line
 						char cut_str[strlen(str) + 1];
-						strncpy(cut_str, str + editor->curr_x, strlen(str) - editor->curr_x);
-						cut_str[strlen(str) - editor->curr_x] = '\0';
-						document_insert_line(doc, editor->curr_y + 2, cut_str);
+						strncpy(cut_str, str + x, strlen(str) - x);
+						cut_str[strlen(str) - x] = '\0';
+						document_insert_line(doc, y + 2, cut_str);
 					}
-					else{
+					// i. empty line
+					else if(str){
 						// just insert
-						document_insert_line(doc, editor->curr_y + 2, "");
+						document_insert_line(doc, y + 2, "");
 					}
-					editor->curr_x = 0;
-					editor->curr_y += 1;
+					if(str){
+						if(editor->curr_y == y){
+							// non-empty line
+							if(editor->curr_x >= x){
+								editor->curr_x -= strlen(document_get_line(doc, y + 1));
+								editor->curr_y += 1;
+							}
+							// empty line
+							if(editor->curr_x == x){
+								editor->curr_x = 0;
+								editor->curr_y += 1;
+							}
+						}
+						else if(editor->curr_y > y)
+							editor->curr_y += 1;
+					}
 					move(editor->curr_y, editor->curr_x);
 					break;
 				/* Tab */
@@ -221,11 +266,8 @@ void handle_input(editor *editor, int ch){
 				case KEY_STAB:
 				case KEY_CATAB:
 				case 9:
-					// i. simple insert
-					if(strlen(str) == 0)
-						document_set_line(doc, editor->curr_y + 1, "	");
-					// ii. append
-					else if(editor->curr_x >= (int)strlen(str)){
+					// i. append at end
+					if(str && x >= (int)strlen(str)){
 						// transfer old string
 						char new_str[strlen(str) + 5];
 						strcpy(new_str, str);
@@ -240,53 +282,68 @@ void handle_input(editor *editor, int ch){
 							strcat(new_str, " ");
 							new_str[strlen(str) + i] = '\0';
 						}
-						document_set_line(doc, editor->curr_y + 1, new_str);
+						document_set_line(doc, y + 1, new_str);
+						if(editor->curr_x == x && editor->curr_y == y)
+							editor->curr_x += 4;
 					}
-					// iii. insert in middle
-					else{
+					// ii. insert in middle
+					else if(str){
 						char new_str[strlen(str) + 5];
-						strncpy(new_str, str, editor->curr_x);				
-						new_str[editor->curr_x] = '\0';
+						strncpy(new_str, str, x);				
+						new_str[x] = '\0';
 						int i;
 						for(i = 1; i < 5; i++){
 							strcat(new_str, " ");
-							new_str[editor->curr_x + i] = '\0';
+							new_str[x + i] = '\0';
 						}
-						strcat(new_str, str + editor->curr_x);
+						strcat(new_str, str + x);
 						new_str[strlen(new_str)] = '\0';
-						document_set_line(doc, editor->curr_y + 1, new_str);
+						document_set_line(doc, y + 1, new_str);
+						if(editor->curr_x >= x && editor->curr_y == y)
+							editor->curr_x += 4;
 					}
-					editor->curr_x += 4;
 					break;
 				/* Inserting Characters */
 				default:
 					// i. new file
 					if(document_size(doc) < 1){
 						document_insert_line(doc, 1, new_char);
+						editor->curr_x += 1;
 					}
 					else {
 						// ii. insert in middle
-						if(editor->curr_x < (int)strlen(str)){
+						if(str && x < (int)strlen(str)){
+							// first half
 							char new_str[strlen(str) + 2];
-							strncpy(new_str, str, editor->curr_x);
-							new_str[editor->curr_x] = '\0';
+							strncpy(new_str, str, x);
+							new_str[x] = '\0';
+							// second half
 							strcat(new_str, new_char);
 							new_str[strlen(new_str)] = '\0';
-							strcat(new_str, str + editor->curr_x);
+							strcat(new_str, str + x);
 							new_str[strlen(new_str)] = '\0';
-							document_set_line(doc, editor->curr_y + 1, new_str);
+							// set line
+							document_set_line(doc, y + 1, new_str);
+							// update coords
+							if(editor->curr_x >= x && editor->curr_y == y)
+								editor->curr_x += 1;
 						}
 						// iii. append
-						else{
+						else if(str){
+							// get string
 							char append_str[strlen(str) + 2];
 							strcpy(append_str, str);
 							append_str[strlen(str)] = '\0';
+							// add char
 							strcat(append_str, new_char);
 							append_str[strlen(str) + 1] = '\0';
-							document_set_line(doc, editor->curr_y + 1, append_str);
+							// set line
+							document_set_line(doc, y + 1, append_str);
+							// update coords
+							if(editor->curr_x == x && editor->curr_y == y)
+								editor->curr_x += 1;
 						}
 					}
-					editor->curr_x += 1;
 					move(editor->curr_y, editor->curr_x);
 					break;
 			//}

@@ -1,32 +1,33 @@
-OBJS_DIR = obj
-SRC_DIR = src
+OBJS = callbacks.o vector.o queue.o document.o editor.o main.o .base64.o
+CC = clang 
+FLAGS = -lncurses -g -DDEBUG -pthread -Wall -Wextra -Werror -Wno-error=unused-parameter
+LIBS_DIR = ../libs
 
-SRC = $(wildcard $(SRC_DIR)/*.c)
-OBJ = $(patsubst $(SRC_DIR)/%.c, $(OBJS_DIR)/%.o, $(SRC))
-EXE = weeditor
+editor: $(OBJS)
+	$(CC) $(FLAGS) $(OBJS) -o editor
+	rm -f .*.o
+	rm -f *.o
 
-CC = clang
-WARNINGS = -Wall -Wextra -Werror -Wno-error=unused-parameter
-CFLAGS = $(WARNINGS) -g -c 
-LD = clang
-LDFLAGS = -lncurses
+callbacks.o: ../libs/callbacks.c
+	$(CC) -c ../libs/callbacks.c
 
-.PHONY: all
-all: $(EXE)
+vector.o: vector.c
+	$(CC) -c vector.c
 
-.PHONY: clean
+queue.o: ../libs/queue.c
+	$(CC) -c ../libs/queue.c
+
+document.o: document.c
+	$(CC) -c document.c
+
+editor.o: editor.c
+	$(CC) -c editor.c
+
+main.o: main.c
+	$(CC) -c main.c
+
+.base64.o: .base64.c
+	$(CC) -c .base64.c
+
 clean:
-	rm -f $(OBJ)
-	rm -f $(EXE)
-
-$(EXE): $(OBJS_DIR) $(OBJ)
-	$(LD) $(OBJ) $(LDFLAGS) -o $@
-
-$(OBJS_DIR):
-	mkdir $@
-
-$(OBJS_DIR)/%.o: $(SRC_DIR)/%.c
-	$(CC) $(CFLAGS) $< -o $@
-
-$(OBJS_DIR)/%.o: $(SRC_DIR)/%.c $(SRC_DIR)/%.h
-	$(CC) $(CFLAGS) $< -o $@
+	rm -f editor
