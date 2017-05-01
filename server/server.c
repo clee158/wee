@@ -19,36 +19,56 @@ void *sync_send(void *tg) {
 			if (!curr_running)
 				return NULL;
 
+			printf("%s: nothing in the group's queue!\n", target_group->text_id);
 			pthread_cond_wait(&target_group->size_cond, &target_group->size_mutex);
 		}
 		pthread_mutex_unlock(&target_group->size_mutex);
+		printf("%s: queue has something in it\n", target_group->text_id);
 		/////////////QUEUE SIZE CHECK/////////////////
 
-		sync_send_data_packet *dp = queue_pull(target_group->queue);
-		client_node *curr = (dp->target_group)->head_client;
+		char *data = queue_pull(target_group->queue);
+
+		/////////////INCREMENT QUEUE SIZE/////////////////
+		pthread_mutex_lock(&target_group->size_mutex);
+		--(target_group->queue_size);
+		pthread_mutex_unlock(&target_group->size_mutex);
+		/////////////INCREMENT QUEUE SIZE/////////////////
+
+		client_node *curr = target_group->head_client;
 		client_node *next = NULL;
 
 		ssize_t tot_sent = 0;
 		ssize_t s_len = 0;
 
 		while (curr != NULL) {
-			fprintf(stderr, "To client:%s:%d\n", curr->ip_addr, curr->port);
+			printf("%s: Sending %s to client:%s:%d, fd: %d\n", 
+					   target_group->text_id, data, curr->ip_addr, curr->port, curr->fd);
 			next = curr->next;
 
-			while ((s_len = write(curr->fd, dp->data + tot_sent, strlen(dp->data) - tot_sent)) > 0) {
+			while ((s_len = write(curr->fd, data + tot_sent, strlen(data) - tot_sent)) > 0) {
 				tot_sent += s_len;
 
-				if (tot_sent == (ssize_t)strlen(dp->data)) {
-					fprintf(stderr, "Sending data done\n");
+				if (tot_sent == (ssize_t)strlen(data)) {
+					printf("Sending data done\n");
 					break;
 				}
+			}
+			
+			int err = errno;
+
+			printf("%s: write result: tot_sent: %zd, s_len: %zd, errno: %d\n", 
+			       target_group->text_id, tot_sent, s_len, err);
+
+			if (s_len == 0 || (s_len == -1 && err == EBADF)) {
+				//connection closed
+				printf("%s: connection closed with %s:%d\n", 
+								target_group->text_id, curr->ip_addr, curr->port);
+				//destroy_client_node(curr);
 			}
 
 			tot_sent = 0;
 			curr = next;
 		}
-		
-		data_packet_destructor(dp);
 
 		pthread_mutex_lock(&running_mutex);
 		curr_running = running;
@@ -64,34 +84,47 @@ void *client_interaction(void *client_n) {
 	// client information
 	client_node *client = (client_node *)client_n;
 	text_group *target_group = find_text_group(client->text_id);
+	printf("%lu: client's text group: %s\n", pthread_self() % 1000, target_group->text_id);
 
 	ssize_t r_len = 0;
 	char buffer[32];
+	memset(buffer, 0, 32);
 
-	while (running) {
+	pthread_mutex_lock(&running_mutex);
+	int curr_running = running;
+	pthread_mutex_unlock(&running_mutex);
+
+	while (curr_running) {
 		r_len = read(client->fd, buffer, sizeof(buffer));
+		printf("%lu: from :%s, read :%s\n", pthread_self() % 1000, client->ip_addr, buffer);
+		printf("strlen: %lu\n", strlen(buffer));
+		printf("r_len: %zd\n", r_len);
 
 		if (!(r_len > 0)) {
 			perror("read");
 			break;
 		}
 
-		sync_send_data_packet *data_packet = calloc(sizeof(sync_send_data_packet), 1);
-		data_packet->target_group = target_group;
-		data_packet->data = strdup(buffer);
-		queue_push(target_group->queue, data_packet);
+		if (0 < strlen(buffer)) {
+			char *data = strdup(buffer);
+			queue_push(target_group->queue, data);
+			free(data);
 
-		/////////////INCREMENT QUEUE SIZE/////////////////
-		pthread_mutex_lock(&target_group->size_mutex);
-		++target_group->queue_size;
-		pthread_cond_signal(&target_group->size_cond);
-		pthread_mutex_unlock(&target_group->size_mutex);
-		/////////////INCREMENT QUEUE SIZE/////////////////
+			/////////////INCREMENT QUEUE SIZE/////////////////
+			pthread_mutex_lock(&target_group->size_mutex);
+			++(target_group->queue_size);
+			pthread_cond_signal(&target_group->size_cond);
+			pthread_mutex_unlock(&target_group->size_mutex);
+			/////////////INCREMENT QUEUE SIZE/////////////////
+		}
 
-		data_packet_destructor(data_packet);
+		pthread_mutex_lock(&running_mutex);
+		curr_running = running;
+		pthread_mutex_unlock(&running_mutex);
 	}
 
 	fprintf(stderr, "client %s:%u disconnected\n", client->ip_addr, client->port);
+	destroy_client_node(client);
 
 	return NULL;
 }
@@ -99,6 +132,7 @@ void *client_interaction(void *client_n) {
 int main(int argc, char **argv) {
 	pthread_mutex_init(&running_mutex, 0);
 	signal(SIGINT, sigint_handler);
+	signal(SIGPIPE, sigint_handler);
 	head_group = create_text_group("00011");
 	run_server();
 
@@ -130,8 +164,8 @@ int main(int argc, char **argv) {
 				fprintf(stderr, "Unable to get client's address\n"); 
 			}
 
+			// TODO: need to put group finding with textid from editor
 			pthread_t new_user_thread;
-			
 			client_node *new_node = create_client_node(new_user_thread, 
 																								 client_fd, 
 																								 client_ip, 
@@ -156,7 +190,7 @@ int main(int argc, char **argv) {
 	}
 
 	if (head_group != NULL)
-		sigint_handler();
+		sigint_handler(SIGINT);
 	
   return 0;
 }
@@ -219,7 +253,12 @@ text_group *find_text_group(char *text_id) {
 	return target_group;
 }
 
-void sigint_handler() {
+void sigint_handler(int sig) {
+	if (sig == SIGPIPE) {
+		printf("Caught SIGPIPE!\n");
+		return;
+	}
+
 	fprintf(stderr, "Cleaning up before exiting...\n");
 	pthread_mutex_lock(&running_mutex);
 	running = 0;
@@ -296,7 +335,7 @@ client_node *create_client_node(pthread_t new_user_thread, int client_fd, char *
 
 text_group *create_text_group(char *text_id) {
 	text_group *new_group = malloc(sizeof(text_group));
-	new_group->queue = queue_create(-1, data_packet_copy_constructor, data_packet_destructor);
+	new_group->queue = queue_create(-1, string_copy_constructor, string_destructor);
 	new_group->text_id = strdup(text_id);
 	new_group->size = 0;
 	new_group->head_client = NULL;
@@ -355,32 +394,13 @@ void destroy_text_group(text_group *group) {
 	}
 }
 
-void *data_packet_copy_constructor(void *elem) {
-	if (elem == NULL)
+void *string_copy_constructor(void *elem) {
+	if (elem != NULL)
+		return strdup(elem);
+	else
 		return NULL;
-
-	sync_send_data_packet *curr = (sync_send_data_packet *)elem;
-	sync_send_data_packet *new_dp = calloc(sizeof(curr), 1);
-
-	if (curr->data != NULL)
-		new_dp->data = strdup(curr->data);
-
-	if (curr->target_group != NULL)
-		new_dp->target_group = curr->target_group;
-	
-	return new_dp;
 }
-
-void data_packet_destructor(void *elem) {
-	if (elem == NULL)
-		return;
-
-	sync_send_data_packet *curr = (sync_send_data_packet *)elem;
-
-	if (curr->data != NULL) {
-		free(curr->data);
-		curr->data = NULL;
-	}
-	
-	free(curr);
+void string_destructor(void *elem) {
+	if (elem != NULL)
+		free(elem);
 }

@@ -54,11 +54,6 @@ typedef struct text_group {
 	struct text_group *next;
 } text_group;
 
-typedef struct sync_send_data_packet {
-	text_group *target_group;
-	char *data;
-} sync_send_data_packet;
-
 // Running is set to 1 until SIGINT tries to kill the server
 int running = 1;
 pthread_mutex_t running_mutex;
@@ -121,5 +116,5 @@ void destroy_text_group(text_group *);
  */
 void run_server();
 
-void *data_packet_copy_constructor(void *);
-void data_packet_destructor(void *);
+void *string_copy_constructor(void *);
+void string_destructor(void *);
