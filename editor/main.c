@@ -48,6 +48,7 @@ void *accept_user_inputs(void *arg) {
 			shutdown(sock_fd, SHUT_RDWR);
 			refresh();
 			endwin();
+			queue_push(work_queue, &ch);
 			return NULL;
 		}
 		
@@ -98,7 +99,7 @@ void *run_server_commands(void *elem){
 }
 
 void run_client() {
-	ip_addr = get_ip();
+	ip_addr = "172.22.152.54";//get_ip();
 	ip_port = get_port();
 	
 	int s;
@@ -166,9 +167,9 @@ int main(int argc, char* argv[]){
 	pthread_t server_command;
 	pthread_t run_instructions;
 	
-	pthread_create(&user_input, NULL, accept_user_inputs, "00011");
 	pthread_create(&server_command, NULL, get_server_commands, "00011");
 	pthread_create(&run_instructions, NULL, run_server_commands, "00011");
+	pthread_create(&user_input, NULL, accept_user_inputs, "00011");
 
 	pthread_join(user_input, NULL);
 	pthread_join(server_command, NULL);
