@@ -8,12 +8,8 @@
 #include <unistd.h>
 #include <errno.h>
 
-#include ".base64.h"
-
 pthread_t input;
 pthread_t output;
-char buff_out[32];
-char buff_in[2048];
 int sock_fd;
 char *get_port();
 char *get_ip();
@@ -24,24 +20,30 @@ void *accept_user_inputs(void *arg) {
 	ssize_t r_len = 0;
 	ssize_t s_len = 0;
 	ssize_t tot_sent = 0;
+	char buff[32];
 
 	while (1) {
-		r_len = read(0, buff_out, sizeof(buff_out));
+		tot_sent = 0;
+		memset(buff, 0, sizeof(buff));
+		r_len = read(0, buff, sizeof(buff));
 
 		if (r_len == -1 && errno != EINTR) {
 			perror("read");
 			break;
 		}
 
-		while (tot_sent < r_len) {
-			s_len = send(sock_fd, buff_out, r_len, 0);
-
-			if (s_len == -1 && errno != EINTR) {
-				perror("send");
-				return NULL;
-			}
-
+		while ((s_len = write(sock_fd, buff + tot_sent, r_len - tot_sent)) > 0) {
 			tot_sent += s_len;
+
+			if (tot_sent == r_len)
+				break;
+		}
+
+		int err = errno;
+
+		if (s_len == -1 && err != EINTR) {
+			printf("something's wrong!\n");
+			printf("s_len: %zd, errno: %d\n", s_len, err);
 		}
 	}
 
@@ -52,34 +54,34 @@ void *print_server_outputs(void *text_id) {
 	ssize_t r_len = 0;
 	ssize_t s_len = 0;
 	ssize_t tot_sent = 0;
+	char buff[32];
+	memset(buff, 0, 32);
 
 	while(1) {
-		r_len = read(sock_fd, buff_in, sizeof(buff_int));
+		tot_sent = 0;
+		memset(buff, 0, sizeof(buff));
+		r_len = read(sock_fd, buff, sizeof(buff));
 
 		if (r_len == -1 && errno != EINTR) {
 			perror("read");
 			break;
 		}
 
-		while (tot_sent < r_len) {
-			s_len = send(sock_fd, buff_out, r_len, 0);
-
-			if (s_len == -1 && errno != EINTR) {
-				perror("send");
-				return NULL;
-			}
-
+		while ((s_len = write(1, buff + tot_sent, r_len - tot_sent)) > 0) {
 			tot_sent += s_len;
+
+			if (tot_sent == r_len)
+				break;
 		}
 	}
 
 	return NULL;
 }
 
-int (int argc, char **argv) {
+int main(int argc, char **argv) {
 	// SOCKET Initialization
-	ip_addr = get_ip();
-	ip_port = get_port();
+	ip_addr = //get_ip();
+	ip_port = "5555";//get_port();
 	printf("server: %s:%s\n", ip_addr, ip_port);
 
   int s;
@@ -109,8 +111,6 @@ int (int argc, char **argv) {
     perror("connect()");
     exit(EXIT_FAILURE);
   }
-
-	buffer[0] = '\0';
 
 	pthread_create(&input, NULL, accept_user_inputs, NULL);
 	pthread_create(&output, NULL, print_server_outputs, "00011" /*TODO:textid*/);

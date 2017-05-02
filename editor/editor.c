@@ -340,8 +340,13 @@ void handle_input(editor *editor, int ch, int x, int y){
 							// set line
 							document_set_line(doc, y + 1, append_str);
 							// update coords
-							if(editor->curr_x == x && editor->curr_y == y)
+							
+		/*TODO: Fix the misalignment here!! */
+							
+							if(editor->curr_x <= x && editor->curr_y == y){
+							//if(editor->curr_y == y){
 								editor->curr_x += 1;
+							}
 						}
 					}
 					move(editor->curr_y, editor->curr_x);
