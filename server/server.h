@@ -32,6 +32,11 @@
 /**
  * Structures
  */
+typedef struct command {
+	int ch;
+	int x;
+	int y;
+} command;
 
 typedef struct client_node {
 	pthread_t id;
@@ -53,11 +58,6 @@ typedef struct text_group {
 	size_t size;
 	struct text_group *next;
 } text_group;
-
-typedef struct sync_send_data_packet {
-	text_group *target_group;
-	char *data;
-} sync_send_data_packet;
 
 // Running is set to 1 until SIGINT tries to kill the server
 int running = 1;
@@ -121,5 +121,5 @@ void destroy_text_group(text_group *);
  */
 void run_server();
 
-void *data_packet_copy_constructor(void *);
-void data_packet_destructor(void *);
+void *command_copy_constructor(void *);
+void command_destructor(void *);

@@ -1,4 +1,4 @@
-OBJS = client.c .base64.c
+OBJS = client.c #.base64.c
 CC = gcc
 FLAGS = -Wall -pthread -g
 
