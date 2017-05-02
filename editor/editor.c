@@ -350,8 +350,7 @@ void handle_input(editor *editor, int ch, int x, int y){
 							
 		/*TODO: Fix the misalignment here!! */
 							
-							if(editor->curr_x <= x && editor->curr_y == y){
-							//if(editor->curr_y == y){
+							if(editor->curr_x == x && editor->curr_y == y){
 								editor->curr_x += 1;
 							}
 						}
@@ -419,9 +418,10 @@ void print_document(editor *editor){
 		clrtoeol();
 	}
 	move(editor->curr_y, editor->curr_x);
-	mvprintw(document_size(doc), 0, "x: %d, y: %d\n", _x, _y);
+	/*mvprintw(document_size(doc), 0, "x: %d, y: %d\n", _x, _y);
 mvprintw(document_size(doc) + 1, 0, "[ BEFORE ] curr_x: %d, curr_y: %d\n", curr_x, curr_y);
-mvprintw(document_size(doc) + 2, 0, "[ AFTER ] curr_x: %d, curr_y: %d\n", editor->curr_x, editor->curr_y);
+mvprintw(document_size(doc) + 2, 0, "[ AFTER ] curr_x: %d, curr_y: %d\n", editor->curr_x, editor->curr_y);*/
+	refresh();
 }
 
 void cleanup(editor *editor){
