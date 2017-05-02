@@ -32,6 +32,11 @@
 /**
  * Structures
  */
+typedef struct command {
+	int ch;
+	int x;
+	int y;
+} command;
 
 typedef struct client_node {
 	pthread_t id;
@@ -116,5 +121,5 @@ void destroy_text_group(text_group *);
  */
 void run_server();
 
-void *string_copy_constructor(void *);
-void string_destructor(void *);
+void *command_copy_constructor(void *);
+void command_destructor(void *);

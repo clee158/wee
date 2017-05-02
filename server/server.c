@@ -2,6 +2,7 @@
 void *sync_send(void *tg) {
 	// Loop through current target_group's nodes to send the updated message 
 	text_group *target_group = (text_group *)tg;
+	char *text_id = strdup(target_group->text_id);
 	int curr_running;
 
 	pthread_mutex_lock(&running_mutex);
@@ -16,8 +17,11 @@ void *sync_send(void *tg) {
 			curr_running = running;
 			pthread_mutex_unlock(&running_mutex);
 			
-			if (!curr_running)
+			if (!curr_running) {
+				printf("%s: not running anymore so exiting\n", text_id);
+				free(text_id);
 				return NULL;
+			}
 
 			printf("%s: nothing in the group's queue!\n", target_group->text_id);
 			pthread_cond_wait(&target_group->size_cond, &target_group->size_mutex);
@@ -26,7 +30,7 @@ void *sync_send(void *tg) {
 		printf("%s: queue has something in it\n", target_group->text_id);
 		/////////////QUEUE SIZE CHECK/////////////////
 
-		char *data = queue_pull(target_group->queue);
+		command *c = queue_pull(target_group->queue);
 
 		/////////////INCREMENT QUEUE SIZE/////////////////
 		pthread_mutex_lock(&target_group->size_mutex);
@@ -41,14 +45,14 @@ void *sync_send(void *tg) {
 		ssize_t s_len = 0;
 
 		while (curr != NULL) {
-			printf("%s: Sending %s to client:%s:%d, fd: %d\n", 
-					   target_group->text_id, data, curr->ip_addr, curr->port, curr->fd);
+			printf("%s: sending command:%d, %d, %d To client:%s:%d, fd: %d\n", 
+					   target_group->text_id, c->ch, c->x, c->y, curr->ip_addr, curr->port, curr->fd);
 			next = curr->next;
 
-			while ((s_len = write(curr->fd, data + tot_sent, strlen(data) - tot_sent)) > 0) {
+			while ((s_len = write(curr->fd, ((char *)c) + tot_sent, sizeof(command) - tot_sent)) > 0) {
 				tot_sent += s_len;
 
-				if (tot_sent == (ssize_t)strlen(data)) {
+				if (tot_sent == sizeof(command)) {
 					printf("Sending data done\n");
 					break;
 				}
@@ -87,28 +91,35 @@ void *client_interaction(void *client_n) {
 	printf("%lu: client's text group: %s\n", pthread_self() % 1000, target_group->text_id);
 
 	ssize_t r_len = 0;
-	char buffer[32];
-	memset(buffer, 0, 32);
+	ssize_t tot_read = 0;
+	command *c = calloc(sizeof(command), 1);
 
 	pthread_mutex_lock(&running_mutex);
 	int curr_running = running;
 	pthread_mutex_unlock(&running_mutex);
 
 	while (curr_running) {
-		r_len = read(client->fd, buffer, sizeof(buffer));
-		printf("%lu: from :%s, read :%s\n", pthread_self() % 1000, client->ip_addr, buffer);
-		printf("strlen: %lu\n", strlen(buffer));
+		tot_read = 0;
+
+		while ((r_len = read(client->fd, ((char *) c) + tot_read, sizeof(command) - tot_read)) > 0) {
+			tot_read += r_len;
+
+			if (tot_read == sizeof(command))
+				break;
+		}
+
+		int err = errno;
+
+		printf("%lu: from :%s, read command:%d, %d, %d\n", pthread_self() % 1000, client->ip_addr, c->ch, c->x, c->y);
 		printf("r_len: %zd\n", r_len);
 
-		if (!(r_len > 0)) {
+		if ((r_len == -1 && err != EINTR) || r_len == 0) {
 			perror("read");
 			break;
 		}
 
-		if (0 < strlen(buffer)) {
-			char *data = strdup(buffer);
-			queue_push(target_group->queue, data);
-			free(data);
+		if (0 < r_len) {
+			queue_push(target_group->queue, c);
 
 			/////////////INCREMENT QUEUE SIZE/////////////////
 			pthread_mutex_lock(&target_group->size_mutex);
@@ -259,6 +270,7 @@ void sigint_handler(int sig) {
 		return;
 	}
 
+	exit(1);
 	fprintf(stderr, "Cleaning up before exiting...\n");
 	pthread_mutex_lock(&running_mutex);
 	running = 0;
@@ -335,7 +347,7 @@ client_node *create_client_node(pthread_t new_user_thread, int client_fd, char *
 
 text_group *create_text_group(char *text_id) {
 	text_group *new_group = malloc(sizeof(text_group));
-	new_group->queue = queue_create(-1, string_copy_constructor, string_destructor);
+	new_group->queue = queue_create(-1, command_copy_constructor, command_destructor);
 	new_group->text_id = strdup(text_id);
 	new_group->size = 0;
 	new_group->head_client = NULL;
@@ -394,13 +406,20 @@ void destroy_text_group(text_group *group) {
 	}
 }
 
-void *string_copy_constructor(void *elem) {
-	if (elem != NULL)
-		return strdup(elem);
-	else
+void *command_copy_constructor(void *elem) {
+	if (elem == NULL)
 		return NULL;
+
+	command *c = (command *)elem;	
+	command *new_c = calloc(sizeof(command), 1);
+	
+	new_c->ch = c->ch;
+	new_c->x = c->x;
+	new_c->y = c->y;
+
+	return new_c;
 }
-void string_destructor(void *elem) {
+void command_destructor(void *elem) {
 	if (elem != NULL)
 		free(elem);
 }
