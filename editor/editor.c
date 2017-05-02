@@ -4,7 +4,7 @@ document *doc;
 //char *filename;
 //char *default_mode;
 //char *insert_mode;
-
+int _x, _y, curr_x, curr_y;
 struct editor{
 	/* 
 	 * d = default
@@ -106,6 +106,13 @@ void handle_input(editor *editor, int ch, int x, int y){
 	char new_char[2];
 	*new_char = (char)ch;
 	new_char[1] = '\0';
+
+	///// FOR TESTING! /////
+	_x = x;
+	_y = y;
+	curr_x = editor->curr_x;
+	curr_y = editor->curr_y;
+	////////////////////////
 	switch(ch){
 		case KEY_DOWN:
 			if(x == editor->curr_x && y == editor->curr_y)
@@ -343,8 +350,7 @@ void handle_input(editor *editor, int ch, int x, int y){
 							
 		/*TODO: Fix the misalignment here!! */
 							
-							if(editor->curr_x <= x && editor->curr_y == y){
-							//if(editor->curr_y == y){
+							if(editor->curr_x == x && editor->curr_y == y){
 								editor->curr_x += 1;
 							}
 						}
@@ -412,6 +418,10 @@ void print_document(editor *editor){
 		clrtoeol();
 	}
 	move(editor->curr_y, editor->curr_x);
+	/*mvprintw(document_size(doc), 0, "x: %d, y: %d\n", _x, _y);
+mvprintw(document_size(doc) + 1, 0, "[ BEFORE ] curr_x: %d, curr_y: %d\n", curr_x, curr_y);
+mvprintw(document_size(doc) + 2, 0, "[ AFTER ] curr_x: %d, curr_y: %d\n", editor->curr_x, editor->curr_y);*/
+	refresh();
 }
 
 void cleanup(editor *editor){
