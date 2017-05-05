@@ -403,13 +403,18 @@ int main(int argc, char **argv) {
 
 	// initialize editor
 	if(argc < 2){
-		printf("./editor <text_id> <new_filename/old_filename>\n");
+		printf("./editor <text_id (5 characters)> <new_filename/old_filename>\n");
 		exit(1);
 	}
-	else if(argc > 2)
-		wee = create_editor_file(argv[2]);
-	else
+	else if(argc == 2){
+		if(strlen(argv[1]) != 5){
+			printf("<text_id> must be a 5 character number.\n");
+			exit(1);
+		}
 		wee = create_editor_no_file();
+	}
+	else
+		wee = create_editor_file(argv[2]);
 	
 	// init text_id
 	text_id = malloc(strlen(argv[1]) + 1);
