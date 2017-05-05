@@ -244,9 +244,10 @@ void handle_input(editor *editor, int ch, int x, int y){
 					// i. non-empty line
 					if(str && x < (int)strlen(str)){
 						// modify original line
-						char new_str[strlen(str) + 1];
+						char new_str[strlen(str) + 2];
 						strncpy(new_str, str, x);
-						new_str[x] = '\0';
+						strcat(new_str, "\n");
+						new_str[x + 1] = '\0';
 						document_set_line(doc, y + 1, new_str);
 						// insert second part of line
 						char cut_str[strlen(str) + 1];
@@ -257,13 +258,18 @@ void handle_input(editor *editor, int ch, int x, int y){
 					// i. empty line
 					else if(str){
 						// just insert
+						char new_str[strlen(str) + 2];
+						strcpy(new_str, str);
+						strcat(new_str, "\n");
+						new_str[x + 1] = '\0';
+						document_set_line(doc, y + 1, new_str);
 						document_insert_line(doc, y + 2, "");
 					}
 					if(str){
 						if(editor->curr_y == y){
 							// non-empty line
 							if(editor->curr_x >= x){
-								editor->curr_x -= strlen(document_get_line(doc, y + 1));
+								editor->curr_x -= strlen(document_get_line(doc, y + 1)) - 1 ;
 								editor->curr_y += 1;
 							}
 							// empty line
