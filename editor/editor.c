@@ -13,7 +13,7 @@ struct editor{
 	 */
 	//char mode;
 	//char *state;
-	char *filename;
+	//char *filename;
 	int curr_x;
 	int curr_y;
 	//document* doc;
@@ -31,20 +31,20 @@ editor* create_editor_no_file(){
 	editor *editor = malloc(sizeof(editor));
 	//editor->mode = 'd';
 	//editor->state = default_mode;
-	editor->filename = NULL;
+	//editor->filename = NULL;
 	editor->curr_x = 0;
 	editor->curr_y = 0;
 	return editor;
 }
 
-editor* create_editor_file(char *filename){	
+/*editor* create_editor_file(char *filename){	
 	// global constants
 	doc = document_create();
 	//filename = strdup(filename);
-	/*default_mode = malloc(sizeof(13));
+	default_mode = malloc(sizeof(13));
 	strcpy(default_mode, "Default Mode");
 	insert_mode = malloc(sizeof(12));
-	strcpy(insert_mode, "Insert Mode");*/
+	strcpy(insert_mode, "Insert Mode");
 
 	// editor struct
 	editor *editor = malloc(sizeof(editor));
@@ -54,15 +54,16 @@ editor* create_editor_file(char *filename){
 	editor->curr_x = 0;
 	editor->curr_y = 0;
 	return editor;
-}
+}*/
 
-void init_scr(){
+void init_scr(editor *editor){
 	initscr();
 	noecho();
 	cbreak();
 	keypad(stdscr, TRUE);
 	scrollok(stdscr, FALSE);
 	idlok(stdscr, TRUE);
+	print_document(editor);
 }
 
 char get_editor_mode(editor *editor){
@@ -161,8 +162,8 @@ void handle_input(editor *editor, int ch, int x, int y){
 			switch(ch){*/
 				// Escape key
 				case 27:
-					if(editor->filename)
-						document_write_to_file(doc, editor->filename);
+					//if(editor->filename)
+						//document_write_to_file(doc, editor->filename);
 					cleanup(editor);
 					//editor->mode = 'd';
 					break;
@@ -244,10 +245,9 @@ void handle_input(editor *editor, int ch, int x, int y){
 					// i. non-empty line
 					if(str && x < (int)strlen(str)){
 						// modify original line
-						char new_str[strlen(str) + 2];
+						char new_str[strlen(str) + 1];
 						strncpy(new_str, str, x);
-						strcat(new_str, "\n");
-						new_str[x + 1] = '\0';
+						new_str[x] = '\0';
 						document_set_line(doc, y + 1, new_str);
 						// insert second part of line
 						char cut_str[strlen(str) + 1];
@@ -258,18 +258,13 @@ void handle_input(editor *editor, int ch, int x, int y){
 					// i. empty line
 					else if(str){
 						// just insert
-						char new_str[strlen(str) + 2];
-						strcpy(new_str, str);
-						strcat(new_str, "\n");
-						new_str[x + 1] = '\0';
-						document_set_line(doc, y + 1, new_str);
 						document_insert_line(doc, y + 2, "");
 					}
 					if(str){
 						if(editor->curr_y == y){
 							// non-empty line
 							if(editor->curr_x >= x){
-								editor->curr_x -= strlen(document_get_line(doc, y + 1)) - 1 ;
+								editor->curr_x -= strlen(document_get_line(doc, y + 1));
 								editor->curr_y += 1;
 							}
 							// empty line
@@ -408,6 +403,8 @@ void move_left(editor *editor){
 }
 
 void move_right(editor *editor){
+	if(document_size(doc) == 0)
+		return;
 	const char *curr_line = document_get_line(doc, editor->curr_y + 1);
 	//if((editor->curr_x + 1 < COLS) && (editor->curr_x + 1 < (int)strlen(curr_line))){
 	if(editor->curr_x + 1 < (int)strlen(curr_line) + 1) {	
@@ -457,10 +454,10 @@ void cleanup(editor *editor){
 		insert_mode = NULL;
 	}*/
 	if(editor){
-		if(editor->filename){
+		/*if(editor->filename){
 			free(editor->filename);
 			editor->filename = NULL;
-		}
+		}*/
 		free(editor);
 		editor = NULL;
 	}

@@ -11,7 +11,7 @@ editor* create_editor_no_file();
 
 editor* create_editor_file(char *filename);
 
-void init_scr();
+void init_scr(editor *editor);
 
 char get_editor_mode(editor *editor);
 
