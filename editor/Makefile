@@ -31,3 +31,4 @@ main.o: main.c
 
 clean:
 	rm -f editor
+	rm -f log.txt
