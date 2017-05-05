@@ -139,10 +139,11 @@ void *accept_user_inputs(void *arg) {
 
 			// ESC key
 			if(c->ch == 27){
-				dprintf(fd, "[ accept_user_input() ]		received ESC!\n");
-				// write entire file to server
+				tot_sent = 0;
 				s_len = 0;
 				r_len = 0;
+				dprintf(fd, "[ accept_user_input() ]		received ESC!\n");
+				// write entire file to server
 				
 				// get vector version
 				vector *v = get_vector_form();
@@ -151,22 +152,26 @@ void *accept_user_inputs(void *arg) {
 				size_t curr_size = strlen(*line);
 				size_t i = 1;
 
-				while ((s_len = write(sock_fd, *line + tot_sent, curr_size - tot_sent)) > 0) { 
+				while ((s_len = write(sock_fd, (*line) + tot_sent, curr_size - tot_sent)) > 0) { 
 					
 					tot_sent += s_len;
 					if (tot_sent == curr_size) {
-						if(i == total_line_num)
+						if(i == total_line_num){
+							
+							dprintf(fd, "[ accept_user_input() ]		done sending file!\n");
 							break;
+						}
 						else{
 							line++;
 							i++;
 							curr_size = strlen(*line);
 							tot_sent = 0;
+							dprintf(fd, "[ accept_user_input() ]		wrote file line %lu!\n", i);
 						}
 					}
 				}
 				int err = errno;
-
+				
 				if ((s_len == -1 && err != EINTR) || s_len == 0){
 					perror("write");
 					break;
@@ -326,21 +331,30 @@ void handle_text_id(){
 						// check if there was remaining string from last read
 						if(i == 0 && remaining[0] != '\0'){
 							strcat(remaining, *(split_str + i));
+							strcat(remaining, "\n");
 							insert_line((int)(y + i), remaining);
 							remaining[0] = '\0';
 						}
-						else
-							insert_line((int)(y + i), *(split_str + i));
+						else{
+							char temp[strlen(*(split_str + i)) + 2];
+							strcpy(temp, *(split_str + i));
+							strcat(temp, "\n");
+							insert_line((int)(y + i), temp);
+						}
 						y++;
 					}
-					// check if last line has "\n"
+					// last line does not have "\n"
 					else{
-						if(buffer[read_size - 1] == '\n'){
-							insert_line((int)(y + i), *(split_str + i));
+						/*if(buffer[read_size - 1] == '\n'){
+							char temp[strlen(*(split_str + i)) + 2];
+							strcpy(temp, *(split_str + i));
+							strcat(temp, "\n");
+							insert_line((int)(y + i), temp);
 							y++;
 						}
-						else
+						else*/
 							strcpy(remaining, *(split_str + i));
+							y++;
 					}
 					free(*(split_str + i));
 				}
@@ -363,7 +377,7 @@ void handle_text_id(){
  *	Initialize socket & set up connection.
  */
 void run_client() {
-	ip_addr = "172.22.152.160";//get_ip();
+	ip_addr = "172.22.152.54";//get_ip();
 	ip_port = get_port();
 
 	int s;

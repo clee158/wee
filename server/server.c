@@ -94,10 +94,11 @@ void *initial_client_interaction(void *client_n) {
 	ssize_t num_read = read_from_fd(client->fd, buffer, 5);
 
 	if (0 < num_read) {
-		client->text_id = calloc(sizeof(char), num_read);
+		buffer[5] = '\0';
+		client->text_id = calloc(sizeof(char), num_read + 1);
 		strncpy(client->text_id, buffer, num_read);
+		client->text_id[5] = '\0';
 		printf("client: %s:%d, requested text_id: %s\n", client->ip_addr, client->port, buffer);
-
 	} else {
 		fprintf(stderr, "invalid text_id: %s\n", buffer);
 		close(client->fd);
@@ -120,11 +121,11 @@ void *initial_client_interaction(void *client_n) {
 	head_group->head_client = client;
 
 	// Building current text_file directory buffer
-	char filename[strlen(buffer)];
+	char filename[strlen(buffer) + 1];
 	memset(buffer, 0, sizeof(buffer));
 	strcpy(buffer, text_dir);									// buffer becomes "text_files/"
 	strcpy(buffer + strlen(text_dir), client->text_id);  // buffer now becomes "text_files/text_id"
-	strncpy(filename, buffer, strlen(buffer));
+	strncpy(filename, buffer, strlen(buffer) + 1);
 
 	// Need to notify the client about the file
 	text_id_info *tid_info = calloc(sizeof(text_id_info), 1);
@@ -135,10 +136,10 @@ void *initial_client_interaction(void *client_n) {
 	if (access(filename, F_OK) == 0) {
 		printf("Requested text_id exists\n");
 		tid_info->exists = 1;
-
 	} else {
 		printf("Requested text_id does NOT exist\n");
 		tid_info->exists = 0;
+		perror("access");
 	}
 
 	pthread_mutex_unlock(&curr_group->file_mutex);
@@ -282,9 +283,12 @@ void client_interaction(void *client_n) {
 
 	int file_fd = open(filename, O_CREAT | O_TRUNC | O_WRONLY, S_IRWXU | S_IRWXG);
 	while ((num_read = read(client->fd, buffer, sizeof(buffer))) > 0) {
+		printf("bytes: %lu\n", num_read);
 		write(file_fd, buffer, num_read);
 		memset(buffer, 0, num_read);
 	}
+	printf("num_read: %zd\n", num_read);
+	perror("read");
 	close(file_fd);
 
 	pthread_mutex_unlock(&target_group->file_mutex);
