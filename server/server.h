@@ -17,16 +17,18 @@
 
 #define PORT "5555"
 
-/*
- *	text_id is consisted of owner + unique number (e.g. [0001][1] = 00011)
- *	When a client tries to access a text file, the server takes client_id and text file 
- *	information and go through following steps:
- *		1) Check if the current user_id (tied to user's ip) is allowed to edit the text file
- *		2) If yes, find if there is any open text_group for that text file (with text_id)
- *		3) Add a client_node with corresponding information at the head
- *			- If there isn't the right text group, add a text_group with corresponding information
- *		4) Send the most recent text file version to the user and keep the user notified 
- *			when there is any change.
+/**
+ * Basic Mechanism
+ *
+ * STARTING
+ * 1. Client sends the server text_id that it wants to have access to
+ * 2. Server checks whether there is existing file for that text_id
+ * 3. Server will send the client existence of requested file and the size of the file
+ * 4. If the requested text file exists, the server will send the content back to the server 
+ *
+ * ENDING
+ * 1. Any client closing down will send its copy back to the server
+ * 2. Then the server will over-write any existing text file of the same text_id
  */
 
 /**
@@ -38,25 +40,34 @@ typedef struct command {
 	int y;
 } command;
 
+typedef struct text_id_info {
+	size_t exists;
+	size_t file_size;
+} text_id_info;
+
 typedef struct client_node {
-	pthread_t id;
 	char *ip_addr;
 	char *text_id;
+	struct client_node *next;
+
+	pthread_t id;
 	int fd;
 	uint16_t port;
-	struct client_node *next;
 } client_node;
 
 typedef struct text_group {
 	queue *queue;
+	char *text_id;
+	client_node *head_client;
+	struct text_group *next;
 	pthread_t sync_sender;
 	pthread_mutex_t size_mutex;
 	pthread_cond_t size_cond;
+
+	pthread_mutex_t file_mutex;
+
 	size_t queue_size;
-	char *text_id;
-	client_node *head_client;
 	size_t size;
-	struct text_group *next;
 } text_group;
 
 // Running is set to 1 until SIGINT tries to kill the server
@@ -65,6 +76,7 @@ pthread_mutex_t running_mutex;
 text_group *head_group;
 int sock_fd;
 struct addrinfo *result;
+char *text_dir = "text_files/";
 
 /*
  * Sends out most updated vesion of text_id
@@ -72,17 +84,30 @@ struct addrinfo *result;
 void *sync_send(void *);
 
 /*
- * Thread's starting point for accepting client inputs
- * Each thread holds a client
+ * Client connection initial point
+ * Server receives text_id of text file that the client wants to open
+ * And server returns with text_id_info struct for the following cases
+ *   1) Requested text_id does not exist on database, therefore it's a new text file entry
+ *      - exists: 0
+ *      - file_size: 0
+ *	 2) Requested text_id exists on server's database, but no one is accessing it right now
+ *      * In this case, the server will send the saved text file back to the client
+ *      - exists: 1
+ *      - file_size: x
  */
-void *client_interaction(void *);
+void *initial_client_interaction(void *);
 
 /*
- * SIGINT handler
+ * After initial point, this is where server accepts each client's data and sync sends them
+ */
+void client_interaction(void *);
+
+/*
+ * SIGNAL handler
  * It cleans up before exiting
  * It joins all the running threads and deletes allocated memory
  */
-void sigint_handler();
+void close_server(int);
 
 /*
  * Creates a text group and returns the pointer to it
@@ -123,3 +148,8 @@ void run_server();
 
 void *command_copy_constructor(void *);
 void command_destructor(void *);
+
+ssize_t read_from_fd(int, char *, size_t);
+ssize_t write_to_fd(int, char *, size_t);
+int signal_handling();
+void client_node_destructor(void *);
