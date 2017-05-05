@@ -79,7 +79,17 @@ int get_curr_y(editor *editor){
 	return editor->curr_y;
 }
 
+void insert_line(int y, char *line){
+	document_insert_line(doc, y + 1, line);
+}
 
+size_t num_lines(){
+	return document_size(doc);
+}
+
+vector *get_vector_form(){
+	return document_to_vector(doc);
+}
 /* 
  *	Handles modes (d, i, s)
  */
@@ -108,10 +118,10 @@ void handle_input(editor *editor, int ch, int x, int y){
 	new_char[1] = '\0';
 
 	///// FOR TESTING! /////
-	_x = x;
+	/*_x = x;
 	_y = y;
 	curr_x = editor->curr_x;
-	curr_y = editor->curr_y;
+	curr_y = editor->curr_y;*/
 	////////////////////////
 	switch(ch){
 		case KEY_DOWN:
@@ -257,7 +267,7 @@ void handle_input(editor *editor, int ch, int x, int y){
 								editor->curr_y += 1;
 							}
 							// empty line
-							if(editor->curr_x == x){
+							else if(editor->curr_x == x){
 								editor->curr_x = 0;
 								editor->curr_y += 1;
 							}
@@ -419,8 +429,9 @@ void print_document(editor *editor){
 	}
 	move(editor->curr_y, editor->curr_x);
 	/*mvprintw(document_size(doc), 0, "x: %d, y: %d\n", _x, _y);
-mvprintw(document_size(doc) + 1, 0, "[ BEFORE ] curr_x: %d, curr_y: %d\n", curr_x, curr_y);
-mvprintw(document_size(doc) + 2, 0, "[ AFTER ] curr_x: %d, curr_y: %d\n", editor->curr_x, editor->curr_y);*/
+	mvprintw(document_size(doc) + 1, 0, "[ BEFORE ] curr_x: %d, curr_y: %d\n", curr_x, curr_y);
+	mvprintw(document_size(doc) + 2, 0, "[ AFTER ] curr_x: %d, curr_y: %d\n", 
+				editor->curr_x, editor->curr_y);*/
 	refresh();
 }
 

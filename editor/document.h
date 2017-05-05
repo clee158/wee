@@ -13,6 +13,8 @@ typedef struct document document;
 /** Allocate and return a new document structure. */
 document *document_create();
 
+/* Returns associated vector */
+vector *document_to_vector(document *this);
 /**
  * Writes the content of 'document' to a file located at 'path_to_file'.
  *
