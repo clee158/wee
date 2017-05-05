@@ -19,6 +19,12 @@ int get_curr_x(editor *editor);
 
 int get_curr_y(editor *editor);
 
+void insert_line(int y, char *line);
+
+size_t num_lines();
+
+vector *get_vector_form();
+
 void handle_mode(editor *editor);
 
 void handle_input(editor* editor, int ch, int x, int y);

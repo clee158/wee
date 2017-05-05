@@ -42,6 +42,10 @@ document *document_create() {
   return doc;
 }
 
+vector *document_to_vector(document *this){
+	return this->vector;
+}
+
 void document_write_to_file(document *this, const char *path_to_file) {
   assert(this);
   assert(path_to_file);
