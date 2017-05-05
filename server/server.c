@@ -82,7 +82,135 @@ void *sync_send(void *tg) {
 	return NULL;
 }
 
-void *client_interaction(void *client_n) {
+void *initial_client_interaction(void *client_n) {
+	client_node *client = (client_node *)client_n;
+	
+	char buffer[512];
+	memset(buffer, 0, sizeof(buffer));
+
+	// Retrieving client's requested text_id
+	ssize_t num_read = read_from_fd(client->fd, buffer, sizeof(buffer));
+
+	if (0 < num_read) {
+		client->text_id = calloc(sizeof(char), num_read);
+		strncpy(client->text_id, buffer, num_read);
+		printf("client: %s:%d, requested text_id: %s\n", client->ip_addr, client->port, buffer);
+
+	} else {
+		fprintf(stderr, "invalid text_id: %s\n", buffer);
+		close(client->fd);
+		client_node_destructor(client);
+
+		return NULL;
+	}
+
+	// Locate where the client is supposed to be at, and insert it into the correct position
+	text_group *curr_group = find_text_group(client->text_id);
+
+	if (curr_group == NULL) {
+		printf("Requested text_id is not on-going or live\n");
+		curr_group = create_text_group(client->text_id);
+		curr_group->next = head_group;
+		head_group = curr_group;
+	}
+
+	client->next = head_group->head_client;
+	head_group->head_client = client;
+
+	// Building current text_file directory buffer
+	char filename[strlen(buffer)];
+	memset(buffer, 0, sizeof(buffer));
+	strcpy(buffer, text_dir);									// buffer becomes "text_files/"
+	strcpy(buffer + strlen(text_dir), client->text_id);  // buffer now becomes "text_files/text_id"
+	strncpy(filename, buffer, strlen(buffer));
+
+	// Need to notify the client about the file
+	text_id_info *tid_info = calloc(sizeof(text_id_info), 1);
+
+	/////////////ACCESS TO TEXT FILE/////////////////
+	pthread_mutex_lock(&curr_group->file_mutex);
+
+	if (access(filename, F_OK) == 0) {
+		printf("Requested text_id exists\n");
+		tid_info->exists = 1;
+
+	} else {
+		printf("Requested text_id does NOT exist\n");
+		tid_info->exists = 0;
+	}
+
+	pthread_mutex_unlock(&curr_group->file_mutex);
+	/////////////ACCESS TO TEXT FILE/////////////////
+
+	// If the file already exists, set the size as well
+	if (tid_info->exists) {
+		int text_fd = open(filename, O_RDONLY);
+		struct stat st;
+		stat(filename, &st);
+		tid_info->file_size = st.st_size;
+	} 
+
+	// Sends the text_id_info back to the client
+	ssize_t num_write = write_to_fd(client->fd, (char *)tid_info, sizeof(tid_info));
+	if (num_write != sizeof(tid_info)) {
+		fprintf(stderr, "connection error\n");
+		close(client->fd);
+		client_node_destructor(client);
+
+		return NULL;
+	}
+
+	/////////////ACCESS TO TEXT FILE/////////////////
+	pthread_mutex_lock(&curr_group->file_mutex);
+
+	// Sending saved text file to the client
+	if (tid_info->exists) {
+		int text_fd = open(filename, O_RDONLY);
+		size_t file_size = tid_info->file_size;
+		size_t tot_read = 0;
+		memset(buffer, 0, sizeof(buffer));
+
+		while ((num_read = read(text_fd, buffer, sizeof(buffer))) > 0) {
+			num_write = write_to_fd(client->fd, buffer, num_read);
+
+			if (num_write != num_read) {
+				fprintf(stderr, "Connection error\n");
+				close(client->fd);
+				close(text_fd);
+				client_node_destructor(client);
+
+				return NULL;
+			}
+
+			tot_read += num_read;
+
+			if (tot_read == file_size)
+				break;
+			else if (file_size < tot_read) {
+				fprintf(stderr, "Sent too much data\n");
+				close(client->fd);
+				close(text_fd);
+				client_node_destructor(client);
+
+				return NULL;
+			}
+		}
+
+		close(text_fd);
+	}
+
+	pthread_mutex_unlock(&curr_group->file_mutex);
+	/////////////ACCESS TO TEXT FILE/////////////////
+	
+	printf("Sent text_id_info successfully to the client\n");
+
+	free(tid_info);
+	client_interaction(client);
+
+	return NULL;
+}
+
+void client_interaction(void *client_n) {
 	pthread_detach(pthread_self());
 
 	// client information
@@ -110,7 +238,8 @@ void *client_interaction(void *client_n) {
 
 		int err = errno;
 
-		printf("%lu: from :%s, read command:%d, %d, %d\n", pthread_self() % 1000, client->ip_addr, c->ch, c->x, c->y);
+		printf("%lu: from :%s, read command:%d, %d, %d\n", 
+							pthread_self() % 1000, client->ip_addr, c->ch, c->x, c->y);
 		printf("r_len: %zd\n", r_len);
 
 		if ((r_len == -1 && err != EINTR) || r_len == 0) {
@@ -119,12 +248,17 @@ void *client_interaction(void *client_n) {
 		}
 
 		if (0 < r_len) {
+			if (c->ch == 27)
+				break;
+
 			queue_push(target_group->queue, c);
 
 			/////////////INCREMENT QUEUE SIZE/////////////////
 			pthread_mutex_lock(&target_group->size_mutex);
+
 			++(target_group->queue_size);
 			pthread_cond_signal(&target_group->size_cond);
+
 			pthread_mutex_unlock(&target_group->size_mutex);
 			/////////////INCREMENT QUEUE SIZE/////////////////
 		}
@@ -134,17 +268,39 @@ void *client_interaction(void *client_n) {
 		pthread_mutex_unlock(&running_mutex);
 	}
 
-	fprintf(stderr, "client %s:%u disconnected\n", client->ip_addr, client->port);
-	destroy_client_node(client);
+	printf("Client pressed closing button.  Let's save the latest contents\n");
+	char filename[strlen(text_dir) + strlen(client->text_id)];
+	strcpy(filename, text_dir);
+	strcpy(filename + strlen(text_dir), client->text_id);
 
-	return NULL;
+	char buffer[5120];
+	memset(buffer, 0, sizeof(buffer));
+	ssize_t num_read = 0;
+
+	/////////////ACCESS TO TEXT FILE/////////////////
+	pthread_mutex_lock(&target_group->file_mutex);
+
+	int file_fd = open(filename, O_CREAT | O_TRUNC | O_WRONLY, S_IRWXU | S_IRWXG);
+	while ((num_read = read(client->fd, buffer, sizeof(buffer))) > 0) {
+		write(file_fd, buffer, num_read);
+		memset(buffer, 0, num_read);
+	}
+	close(file_fd);
+
+	pthread_mutex_unlock(&target_group->file_mutex);
+	/////////////ACCESS TO TEXT FILE/////////////////
+
+	printf("Client %s:%u disconnected\n", client->ip_addr, client->port);
+	free(c);
+	destroy_client_node(client);
 }
 
 int main(int argc, char **argv) {
 	pthread_mutex_init(&running_mutex, 0);
-	signal(SIGINT, sigint_handler);
-	signal(SIGPIPE, sigint_handler);
-	head_group = create_text_group("00011");
+
+	if (!signal_handling())
+		return EXIT_FAILURE;
+
 	run_server();
 
 	struct sockaddr_in client_addr;
@@ -175,23 +331,18 @@ int main(int argc, char **argv) {
 				fprintf(stderr, "Unable to get client's address\n"); 
 			}
 
-			// TODO: need to put group finding with textid from editor
 			pthread_t new_user_thread;
 			client_node *new_node = create_client_node(new_user_thread, 
 																								 client_fd, 
 																								 client_ip, 
-																								 "00011", 
+																								 "NULL", // temporary
 																								 ntohs(client_addr.sin_port));
 
-			if (pthread_create(&new_user_thread, NULL, client_interaction, new_node)) {
+			if (pthread_create(&new_user_thread, NULL, initial_client_interaction, new_node)) {
 				fprintf(stderr, "Connection failed with client=%s:%d\n", client_ip, 
 																											ntohs(client_addr.sin_port));
 				destroy_client_node(new_node);
 
-			} else {
-				// When start using text_id, put right client_node into correct text_group
-				new_node->next = head_group->head_client;
-				head_group->head_client = new_node;
 			}
 		}
 
@@ -201,9 +352,56 @@ int main(int argc, char **argv) {
 	}
 
 	if (head_group != NULL)
-		sigint_handler(SIGINT);
+		close_server(SIGINT);
 	
   return 0;
+}
+
+void destroy_text_group(text_group *group) {
+	if (group == NULL)
+		return;
+	
+	// Loop through to find the correct group to delete for connecting groups 
+	text_group *prev_group = NULL;
+	text_group *curr_group = head_group;
+
+	while (curr_group) {
+		if (!strcmp(group->text_id, curr_group->text_id)) {	// found it!
+			// Correctly connect each other
+			if (prev_group)
+				prev_group->next = curr_group->next;
+			else
+				head_group = curr_group->next;
+
+			// Free its client nodes
+			if (curr_group->head_client != NULL) {
+				client_node *curr_node = curr_group->head_client;
+				client_node *next_node = NULL;
+
+				while (curr_node) {
+					next_node = curr_node->next;
+					client_node_destructor(curr_node);
+					curr_node = next_node;
+				}
+			}
+
+			// Free allocated memories
+			if (group->text_id != NULL) {
+				free(group->text_id);
+				group->text_id = NULL;
+			}
+	
+			queue_destroy(curr_group->queue);
+			pthread_cond_destroy(&curr_group->size_cond);
+			pthread_mutex_destroy(&curr_group->size_mutex);
+			free(curr_group);
+
+			break;
+		}
+
+		prev_group = curr_group;
+		curr_group = curr_group->next;
+	}
 }
 
 void destroy_client_node(client_node *client) {
@@ -225,22 +423,7 @@ void destroy_client_node(client_node *client) {
 
 			curr_node->next = NULL;
 
-			// Free allocated memories
-			if (client->ip_addr != NULL) {
-				free(client->ip_addr);
-				client->ip_addr = NULL;
-			}
-
-			if (client->text_id != NULL) {
-				free(client->text_id);
-				client->text_id = NULL;
-			}
-		
-			// Close open fd
-			if (client->fd != -1)
-				close(client->fd);
-
-			free(client);
+			client_node_destructor(curr_node);
 			break;
 		}
 
@@ -249,22 +432,30 @@ void destroy_client_node(client_node *client) {
 	}
 }
 
+void client_node_destructor(void *elem) {
+	if (elem == NULL)
+		return;
+	
+	client_node *client = (client_node *) elem;
 
-text_group *find_text_group(char *text_id) {
-	text_group *target_group = head_group;
-
-	while (target_group != NULL && strcmp(target_group->text_id, text_id))
-		target_group = target_group->next;
-
-	if (target_group == NULL) {
-		perror("Failed to find the correct text_group\n");
-		return NULL;
+	if (client->ip_addr != NULL) {
+		free(client->ip_addr);
+		client->ip_addr = NULL;
 	}
 
-	return target_group;
+	if (client->text_id != NULL) {
+		free(client->text_id);
+		client->text_id = NULL;
+	}
+
+	// Close open fd
+	close(client->fd);
+
+	free(client);
+	client = NULL;
 }
 
-void sigint_handler(int sig) {
+void close_server(int sig) {
 	if (sig == SIGPIPE) {
 		printf("Caught SIGPIPE!\n");
 		return;
@@ -277,8 +468,6 @@ void sigint_handler(int sig) {
 	pthread_mutex_unlock(&running_mutex);
 	text_group *curr_group = head_group;
 	text_group *next_group = NULL;
-	//client_node *curr_node = NULL;
-	//client_node *next_node = NULL;
 
 	while (curr_group != NULL) {
 		pthread_cond_signal(&curr_group->size_cond);
@@ -290,6 +479,101 @@ void sigint_handler(int sig) {
 
 	close(sock_fd);
 	exit(EXIT_SUCCESS);
+}
+
+ssize_t read_from_fd(int fd, char *buffer, size_t count) {
+  ssize_t total = 0;
+  ssize_t rtn_val = 0;
+  errno = 0;
+
+  while (total < (ssize_t)count) {
+    //fprintf(stderr, "read_all_from_fd: continuing reading\n");
+    rtn_val = read(fd, buffer, count- total);
+
+    if (rtn_val == -1) {
+      if (errno != EINTR) {
+        //perror(NULL);
+        return -1;
+      } else {
+        //perror(NULL);
+        errno = 0;
+      }
+    } else {
+      total += rtn_val;
+      buffer += rtn_val;
+
+      if (rtn_val == 0) {
+        //fprintf(stderr, "read_all_from_fd: connection closed: stop reading\n");
+        return total;
+      }
+    }
+  }
+  
+  //fprintf(stderr, "read_all_from_fd: finished reading successfully\n");
+  return total;
+}
+
+ssize_t write_to_fd(int fd, char *buffer, size_t count) {
+  ssize_t total = 0;
+  ssize_t rtn_val = 0;
+  errno = 0;
+
+  while (total < (ssize_t)count) {
+    //fprintf(stderr, "write_all_to_fd: continuing writing\n");
+    rtn_val = write(fd, buffer + total, count - total);
+
+    if (rtn_val == -1) {
+      if (errno != EINTR) {
+        //perror(NULL);
+        return -1;
+      } else {
+        //perror(NULL);
+        errno = 0;
+      }
+    } else {
+      total += rtn_val;
+
+      if (rtn_val == 0) {
+        //fprintf(stderr, "write_all_to_fd: connection closed: stop writing\n");
+        return total;
+      }
+    }
+  }
+
+  //fprintf(stderr, "write_all_to_fd: finished writing successfully\n");
+  return total;
+}
+
+client_node *create_client_node(pthread_t new_user_thread, int client_fd, char *client_ip, 
+																														char *text_id, uint16_t port) {
+	client_node *new_node = malloc(sizeof(client_node));
+	new_node->id = new_user_thread;
+	new_node->fd = client_fd;
+	new_node->port = port;
+	new_node->next = NULL;
+
+	if (client_ip != NULL)
+		new_node->ip_addr = strdup(client_ip);
+
+	if (text_id != NULL)
+		new_node->text_id = strdup(text_id);
+
+	return new_node;
+}
+
+text_group *create_text_group(char *text_id) {
+	text_group *new_group = malloc(sizeof(text_group));
+	new_group->queue = queue_create(-1, command_copy_constructor, command_destructor);
+	new_group->text_id = strdup(text_id);
+	new_group->size = 0;
+	new_group->head_client = NULL;
+	new_group->next = NULL;
+	pthread_cond_init(&new_group->size_cond, NULL);
+	pthread_mutex_init(&new_group->size_mutex, NULL);
+	pthread_mutex_init(&new_group->file_mutex, NULL);
+	pthread_create(&new_group->sync_sender, NULL, sync_send, new_group);
+
+	return new_group;
 }
 
 void run_server() {
@@ -332,80 +616,6 @@ void run_server() {
 	freeaddrinfo(result);
 }
 
-client_node *create_client_node(pthread_t new_user_thread, int client_fd, char *client_ip, 
-																														char *text_id, uint16_t port) {
-	client_node *new_node = malloc(sizeof(client_node));
-	new_node->id = new_user_thread;
-	new_node->fd = client_fd;
-	new_node->ip_addr = strdup(client_ip);
-	new_node->text_id = strdup(text_id);
-	new_node->port = port;
-	new_node->next = NULL;
-
-	return new_node;
-}
-
-text_group *create_text_group(char *text_id) {
-	text_group *new_group = malloc(sizeof(text_group));
-	new_group->queue = queue_create(-1, command_copy_constructor, command_destructor);
-	new_group->text_id = strdup(text_id);
-	new_group->size = 0;
-	new_group->head_client = NULL;
-	new_group->next = NULL;
-	pthread_cond_init(&new_group->size_cond, NULL);
-	pthread_mutex_init(&new_group->size_mutex, NULL);
-	pthread_create(&new_group->sync_sender, NULL, sync_send, new_group);
-
-	return new_group;
-}
-
-void destroy_text_group(text_group *group) {
-	if (group == NULL)
-		return;
-	
-	// Loop through to find the correct group to delete for connecting groups 
-	text_group *prev_group = NULL;
-	text_group *curr_group = head_group;
-
-	while (curr_group) {
-		if (!strcmp(group->text_id, curr_group->text_id)) {	// found it!
-			// Correctly connect each other
-			if (prev_group)
-				prev_group->next = curr_group->next;
-			else
-				head_group = curr_group->next;
-
-			// Free its client nodes
-			if (curr_group->head_client != NULL) {
-				client_node *curr_node = curr_group->head_client;
-				client_node *next_node = NULL;
-
-				while (curr_node) {
-					next_node = curr_node->next;
-					destroy_client_node(curr_node);
-					curr_node = next_node;
-				}
-			}
-
-			// Free allocated memories
-			if (group->text_id != NULL) {
-				free(group->text_id);
-				group->text_id = NULL;
-			}
-	
-			queue_destroy(curr_group->queue);
-			pthread_cond_destroy(&curr_group->size_cond);
-			pthread_mutex_destroy(&curr_group->size_mutex);
-			free(curr_group);
-
-			break;
-		}
-
-		prev_group = curr_group;
-		curr_group = curr_group->next;
-	}
-}
-
 void *command_copy_constructor(void *elem) {
 	if (elem == NULL)
 		return NULL;
@@ -419,7 +629,40 @@ void *command_copy_constructor(void *elem) {
 
 	return new_c;
 }
+
 void command_destructor(void *elem) {
-	if (elem != NULL)
+	if (elem != NULL) {
 		free(elem);
+		elem = NULL;
+	}
+}
+
+int signal_handling() {
+  struct sigaction act_int, act_pipe;
+  memset(&act_int, '\0', sizeof(act_int));
+  memset(&act_pipe, '\0', sizeof(act_pipe));
+  act_int.sa_handler = close_server;
+  act_pipe.sa_handler = close_server;
+  if (sigaction(SIGINT, &act_int, NULL) < 0) {
+    perror("sigaction-SIGINT");
+    return 0;
+  }
+  if (sigaction(SIGPIPE, &act_pipe, NULL) < 0) {
+    perror("sigaction-SIGPIPE");
+    return 0;
+  }
+
+  return 1;
+}
+
+text_group *find_text_group(char *text_id) {
+	text_group *target_group = head_group;
+
+	while (target_group != NULL && strcmp(target_group->text_id, text_id))
+		target_group = target_group->next;
+
+	if (target_group == NULL)
+		return NULL;
+
+	return target_group;
 }
