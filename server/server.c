@@ -154,7 +154,7 @@ void *initial_client_interaction(void *client_n) {
 
 	// Sends the text_id_info back to the client
 	ssize_t num_write = write_to_fd(client->fd, (char *)tid_info, sizeof(text_id_info));
-	if (num_write != sizeof(tid_info)) {
+	if (num_write != sizeof(text_id_info)) {
 		fprintf(stderr, "connection error\n");
 		close(client->fd);
 		client_node_destructor(client);
@@ -522,6 +522,7 @@ ssize_t write_to_fd(int fd, char *buffer, size_t count) {
   while (total < (ssize_t)count) {
     //fprintf(stderr, "write_all_to_fd: continuing writing\n");
     rtn_val = write(fd, buffer + total, count - total);
+		printf("rtn_val: %zd\n", rtn_val);
 
     if (rtn_val == -1) {
       if (errno != EINTR) {

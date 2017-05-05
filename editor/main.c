@@ -363,7 +363,7 @@ void handle_text_id(){
  *	Initialize socket & set up connection.
  */
 void run_client() {
-	ip_addr = "172.22.152.54";//get_ip();
+	ip_addr = "172.22.152.160";//get_ip();
 	ip_port = get_port();
 
 	int s;
@@ -423,7 +423,7 @@ int main(int argc, char **argv) {
 	strcpy(text_id, argv[1]);
 	
 	// log for debugging purposes
-	fd = open("log.txt", O_RDWR | O_CREAT);
+	fd = open("log.txt", O_RDWR | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG);
 	dprintf(fd, "[ Main() ]\n");
 	
 	// set up socket & connection
