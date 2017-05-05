@@ -1,4 +1,33 @@
 #include "server.h"
+// Debugging purpose
+void print_all() {
+	printf("////////CURRENTLY LIVE CLINETS///////////\n");
+	text_group *curr_group = head_group;
+	text_group *next_group = NULL;
+
+	while (curr_group != NULL) {
+		next_group = curr_group->next;
+
+		client_node *curr_node = curr_group->head_client;
+		client_node *next_node = NULL;
+		printf("TEXT GROUP: %s\n", curr_group->text_id);
+
+		while (curr_node != NULL) {
+			next_node = curr_node->next;
+
+			printf("  client: %s:%d\n", curr_node->ip_addr, curr_node->port);
+			printf("  client_fd: %d\n", curr_node->fd);
+
+			curr_node = next_node;
+			next_node = NULL;
+		}
+
+		curr_group = next_group;
+		next_group = NULL;
+	}
+	printf("////////DEUBUGGING PURPOSE/////////\n");
+}
+
 void *sync_send(void *tg) {
 	// Loop through current target_group's nodes to send the updated message 
 	text_group *target_group = (text_group *)tg;
@@ -117,8 +146,8 @@ void *initial_client_interaction(void *client_n) {
 		head_group = curr_group;
 	}
 
-	client->next = head_group->head_client;
-	head_group->head_client = client;
+	client->next = curr_group->head_client;
+	curr_group->head_client = client;
 
 	// Building current text_file directory buffer
 	char filename[strlen(buffer) + 1];
@@ -174,8 +203,9 @@ void *initial_client_interaction(void *client_n) {
 		memset(buffer, 0, sizeof(buffer));
 		
 		while ((num_read = read(text_fd, buffer, sizeof(buffer))) > 0) {
+			printf("writing to client: %s\n", buffer);
+
 			num_write = write_to_fd(client->fd, buffer, num_read);
-			printf("writing to client: %lu bytes\n", num_write);
 			if (num_write != num_read) {
 				fprintf(stderr, "Connection error\n");
 				close(client->fd);
@@ -217,6 +247,9 @@ void client_interaction(void *client_n) {
 	// client information
 	client_node *client = (client_node *)client_n;
 	text_group *target_group = find_text_group(client->text_id);
+
+	print_all();
+
 	printf("%lu: client's text group: %s\n", pthread_self() % 1000, target_group->text_id);
 
 	ssize_t r_len = 0;
@@ -295,6 +328,13 @@ void client_interaction(void *client_n) {
 	printf("Client %s:%u disconnected\n", client->ip_addr, client->port);
 	free(c);
 	destroy_client_node(client);
+	
+	if (target_group->head_client == NULL) {
+		printf("No more live clients to the text group: %s\n", target_group->text_id);
+		destroy_text_group(target_group);
+	}
+
+	print_all();
 }
 
 int main(int argc, char **argv) {
