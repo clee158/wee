@@ -281,12 +281,14 @@ void handle_text_id(){
 		perror("write");
 		return;
 	}
-	
+	printf("waiting to read!\n");
+	tot_read = 0;
 	// ii. read in text_id_info from server
 	text_id_info *tii = calloc(sizeof(text_id_info), 1);
-	while ((r_len = read(sock_fd, tii + tot_read, sizeof(text_id_info) - tot_read)) > 0) {
-		
+	while ((r_len = read(sock_fd, (char*)tii + tot_read, sizeof(text_id_info) - tot_read)) > 0) {
+		printf("reading!\n");
 		tot_read += r_len;
+		printf("total bytes read: %lu\n", tot_read);
 		if (tot_read == sizeof(text_id_info)) {
 			dprintf(fd, "[ handle_text_id() ] received text_id_info from server!\n");
 			printf("text_id_info received from server!\n");

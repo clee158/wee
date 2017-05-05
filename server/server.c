@@ -153,7 +153,7 @@ void *initial_client_interaction(void *client_n) {
 	} 
 
 	// Sends the text_id_info back to the client
-	ssize_t num_write = write_to_fd(client->fd, (char *)tid_info, sizeof(tid_info));
+	ssize_t num_write = write_to_fd(client->fd, (char *)tid_info, sizeof(text_id_info));
 	if (num_write != sizeof(tid_info)) {
 		fprintf(stderr, "connection error\n");
 		close(client->fd);
