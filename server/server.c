@@ -83,13 +83,15 @@ void *sync_send(void *tg) {
 }
 
 void *initial_client_interaction(void *client_n) {
+	pthread_detach(pthread_self());
+
 	client_node *client = (client_node *)client_n;
 	
 	char buffer[512];
 	memset(buffer, 0, sizeof(buffer));
 
 	// Retrieving client's requested text_id
-	ssize_t num_read = read_from_fd(client->fd, buffer, sizeof(buffer));
+	ssize_t num_read = read_from_fd(client->fd, buffer, 5);
 
 	if (0 < num_read) {
 		client->text_id = calloc(sizeof(char), num_read);
@@ -211,8 +213,6 @@ void *initial_client_interaction(void *client_n) {
 }
 
 void client_interaction(void *client_n) {
-	pthread_detach(pthread_self());
-
 	// client information
 	client_node *client = (client_node *)client_n;
 	text_group *target_group = find_text_group(client->text_id);
@@ -489,6 +489,7 @@ ssize_t read_from_fd(int fd, char *buffer, size_t count) {
   while (total < (ssize_t)count) {
     //fprintf(stderr, "read_all_from_fd: continuing reading\n");
     rtn_val = read(fd, buffer, count- total);
+		printf("rtn_val: %zd\n", rtn_val);
 
     if (rtn_val == -1) {
       if (errno != EINTR) {
