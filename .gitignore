@@ -1,5 +1,7 @@
-.DS_Store
+*.DS_Store
 server/server
-client/client
 server/00011
 editor/obj/*.o
+editor/editor
+editor/log.txt
+server/text_files/
