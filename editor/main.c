@@ -64,26 +64,19 @@ void command_destructor(void *elem) {
  * *
  **************************************************************************************/
 char** strsplit(const char* str, const char* delim, size_t* numtokens){
-	// copy the original string so that we don't overwrite parts of it
-	// (don't do this if you need to keep the old line,
-	// as this is less efficient)
 	char *s = strdup(str);
-	// these three variables are part of a very common idiom to
-	// implement a dynamically-growing array
 	size_t tokens_alloc = 1;
 	size_t tokens_used = 0;
 	char **tokens = calloc(tokens_alloc, sizeof(char*));
-	char *token, *strtok_ctx;
-	for(token = strtok_r(s, delim, &strtok_ctx);
-			token != NULL;
-			token = strtok_r(NULL, delim, &strtok_ctx)){
-		// check if we need to allocate more space for tokens
+	char *token, *rest = s;
+	while((token = strsep(&rest, delim)) != NULL){
 		if(tokens_used == tokens_alloc){
 			tokens_alloc *= 2;
 			tokens = realloc(tokens, tokens_alloc * sizeof(char*));
 		}
 		tokens[tokens_used++] = strdup(token);
 	}
+	
 	// cleanup
 	if(tokens_used == 0){
 		free(tokens);
@@ -121,6 +114,7 @@ void *accept_user_inputs(void *arg) {
 		if(c->ch == KEY_DOWN || c->ch == KEY_UP || c->ch == KEY_LEFT || c->ch == KEY_RIGHT)
 			queue_push(work_queue, c);
 		else{
+			// send server the command
 			while ((s_len = write(sock_fd, ((char *)c) + tot_sent, sizeof(command) - tot_sent)) > 0) { 
 
 				tot_sent += s_len;
@@ -137,7 +131,7 @@ void *accept_user_inputs(void *arg) {
 				break;
 			}
 
-			// ESC key
+			// ESC key	-- save before exiting!
 			if(c->ch == 27){
 				tot_sent = 0;
 				s_len = 0;
@@ -148,11 +142,16 @@ void *accept_user_inputs(void *arg) {
 				// get vector version
 				vector *v = get_vector_form();
 				char **line = (char**)vector_front(v);
-				size_t total_line_num = num_lines();
-				size_t curr_size = strlen(*line);
-				size_t i = 1;
+				char updated_line[500];
+				strcpy(updated_line, *line);
+				strcat(updated_line, "\n");
 
-				while ((s_len = write(sock_fd, (*line) + tot_sent, curr_size - tot_sent)) > 0) { 
+				size_t total_line_num = num_lines();
+				size_t curr_size = strlen(updated_line);
+				size_t i = 1;
+				
+				// write entire file to server before closing, to save the file
+				while ((s_len = write(sock_fd, updated_line + tot_sent, curr_size - tot_sent)) > 0) { 
 					
 					tot_sent += s_len;
 					if (tot_sent == curr_size) {
@@ -162,9 +161,11 @@ void *accept_user_inputs(void *arg) {
 							break;
 						}
 						else{
-							line++;
 							i++;
-							curr_size = strlen(*line);
+							line++;
+							strcpy(updated_line, *line);
+							strcat(updated_line, "\n");
+							curr_size = strlen(updated_line);
 							tot_sent = 0;
 							dprintf(fd, "[ accept_user_input() ]		wrote file line %lu!\n", i);
 						}
@@ -204,6 +205,7 @@ void *get_server_commands(void *arg) {
 	while(1) {
 		tot_read = 0;
 
+		// read in command
 		while ((r_len = read(sock_fd, ((char *) c) + tot_read, sizeof(command) - tot_read)) > 0) {
 			tot_read += r_len;
 
@@ -220,6 +222,7 @@ void *get_server_commands(void *arg) {
 
 	dprintf(fd, "[ get_server_commands() ]	queue_push: ch: %d, x: %d, y: %d\n", c->ch, c->x, c->y);
 		if (tot_read == sizeof(command))
+			// pass on command to worker thread
 			queue_push(work_queue, c);
 	}
 
@@ -234,6 +237,7 @@ void *get_server_commands(void *arg) {
 void *run_server_commands(void *arg) {
 	dprintf(fd, "[ run_server_commands() ]\n");
 	while(1) {
+		// send to editor
 		command *c = (command *) queue_pull(work_queue);
 		handle_input(wee, c->ch, c->x, c->y);
 
@@ -242,8 +246,7 @@ void *run_server_commands(void *arg) {
 			print_document(wee);
 		} else {
 			dprintf(fd, "[ run_server_commands() ]	shutting down!\n");
-			//shutdown(sock_fd, SHUT_RDWR);
-			//close(sock_fd);
+			// cleanup
 			refresh();
 			endwin();
 			break;
@@ -258,11 +261,10 @@ void *run_server_commands(void *arg) {
 /*
  *	Sends text_id to server.
  *	Server replies with text_id_info, which indicates whether:
- *		1. file is new or pre-existing
- *		2. there are on-going users editing the doc
+ *		=> file is new or pre-existing
  *
  *	If (exists == 1)
- *		= read in file strings and update doc
+ *		=> read in file strings and update doc
  */
 void handle_text_id(){
 	
@@ -311,55 +313,53 @@ void handle_text_id(){
 	if(tii->exists && tii->file_size){
 		ssize_t read_size = 100;
 		size_t y = 0;
+		tot_read = 0;
+		r_len = 0;
 		
 		printf("reading in requested file from server...\n");
 		dprintf(fd, "[ handle_text_id() ] reading in pre-existing file from server!\n");
 		
 		char buffer[1001];
 		char remaining[1501];
+		remaining[0] = '\0';
 		while ((r_len = read(sock_fd, buffer + tot_read, read_size)) > 0) {
 		
 			tot_read += r_len;
-			if ((tot_read % read_size) == 0) {
-				buffer[read_size] = '\0';
+			buffer[r_len] = '\0';
 
-				size_t num_tokens, i;
-				char **split_str = strsplit(buffer, "\n", &num_tokens);
+			printf("total_bytes_read: %lu\n", tot_read);
+				
+			size_t num_tokens, i;
+			char **split_str = strsplit(buffer, "\n", &num_tokens);
+				
+			printf("num_tokens: %lu\n", num_tokens);
 
-				for(i = 0; i < num_tokens; i++){
-					if(i != (num_tokens - 1)){
-						// check if there was remaining string from last read
-						if(i == 0 && remaining[0] != '\0'){
-							strcat(remaining, *(split_str + i));
-							strcat(remaining, "\n");
-							insert_line((int)(y + i), remaining);
-							remaining[0] = '\0';
-						}
-						else{
-							char temp[strlen(*(split_str + i)) + 2];
-							strcpy(temp, *(split_str + i));
-							strcat(temp, "\n");
-							insert_line((int)(y + i), temp);
-						}
+			for(i = 0; i < num_tokens; i++){
+				if(i != (num_tokens - 1)){
+					// check if there was remaining string from last read
+					if(i == 0 && remaining[0] != '\0'){
+						strcat(remaining, *(split_str + i));
+						insert_line((int)(y), remaining);
+						remaining[0] = '\0';
+					}
+					else{
+						insert_line((int)(y), *(split_str + i));
+					}
+					y++;
+				}
+				// check if last line has "\n"
+				else{
+					if(buffer[r_len - 1] == '\n'){
+						insert_line((int)(y), *(split_str + i));
 						y++;
 					}
-					// last line does not have "\n"
-					else{
-						/*if(buffer[read_size - 1] == '\n'){
-							char temp[strlen(*(split_str + i)) + 2];
-							strcpy(temp, *(split_str + i));
-							strcat(temp, "\n");
-							insert_line((int)(y + i), temp);
-							y++;
-						}
-						else*/
-							strcpy(remaining, *(split_str + i));
-							y++;
-					}
-					free(*(split_str + i));
+					else
+						strcpy(remaining, *(split_str + i));
 				}
-				free(split_str);
+				free(*(split_str + i));
 			}
+			free(split_str);
+			
 			if(tot_read == tii->file_size)
 				break;
 		}
@@ -377,7 +377,11 @@ void handle_text_id(){
  *	Initialize socket & set up connection.
  */
 void run_client() {
-	ip_addr = "172.22.152.54";//get_ip();
+	/*	NOTE:
+	 *
+	 *	If you would like to run the client and the server locally,
+	 *	replace "get_ip()" with your own ip address.
+	 */
 	ip_port = get_port();
 
 	int s;
@@ -416,25 +420,36 @@ void run_client() {
  *	Main thread running the whole biz.
  */
 int main(int argc, char **argv) {
-
+	
 	// initialize editor
-	if(argc < 2){
-		printf("./editor <text_id (5 characters)> <new_filename/old_filename>\n");
+	if(argc < 3){
+		printf("./editor [server] [text_id]\n");
+		printf("	[server]: 'local' or 'remote'\n");
+		printf("	[text_id]: 5 integer number\n");
+		printf("	example: ./editor local 00011\n");
 		exit(1);
 	}
-	else if(argc == 2){
-		if(strlen(argv[1]) != 5){
+	else{
+		// check arguments
+		if(strcmp(argv[1], "local") == 0)
+			ip_addr = "127.0.0.1";
+		else if(strcmp(argv[1], "remote") == 0)
+			ip_addr = get_ip();
+		else{
+			printf("[server]: must be 'local' or 'remote'\n");
+			exit(1);
+		}
+
+		if(strlen(argv[2]) != 5){
 			printf("<text_id> must be a 5 character number.\n");
 			exit(1);
 		}
 		wee = create_editor_no_file();
 	}
-	else
-		wee = create_editor_file(argv[2]);
 	
 	// init text_id
-	text_id = malloc(strlen(argv[1]) + 1);
-	strcpy(text_id, argv[1]);
+	text_id = malloc(strlen(argv[2]) + 1);
+	strcpy(text_id, argv[2]);
 	
 	// log for debugging purposes
 	fd = open("log.txt", O_RDWR | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG);
@@ -447,7 +462,7 @@ int main(int argc, char **argv) {
 	handle_text_id();
 
 	// start ncurses scrren
-	init_scr();
+	init_scr(wee);
 
 	// queue for holding commands
 	work_queue = queue_create(-1, command_copy_constructor, command_destructor);

@@ -172,10 +172,10 @@ void *initial_client_interaction(void *client_n) {
 		size_t file_size = tid_info->file_size;
 		size_t tot_read = 0;
 		memset(buffer, 0, sizeof(buffer));
-
+		
 		while ((num_read = read(text_fd, buffer, sizeof(buffer))) > 0) {
 			num_write = write_to_fd(client->fd, buffer, num_read);
-
+			printf("writing to client: %lu bytes\n", num_write);
 			if (num_write != num_read) {
 				fprintf(stderr, "Connection error\n");
 				close(client->fd);
@@ -283,11 +283,9 @@ void client_interaction(void *client_n) {
 
 	int file_fd = open(filename, O_CREAT | O_TRUNC | O_WRONLY, S_IRWXU | S_IRWXG);
 	while ((num_read = read(client->fd, buffer, sizeof(buffer))) > 0) {
-		printf("bytes: %lu\n", num_read);
 		write(file_fd, buffer, num_read);
 		memset(buffer, 0, num_read);
 	}
-	printf("num_read: %zd\n", num_read);
 	perror("read");
 	close(file_fd);
 
@@ -304,6 +302,11 @@ int main(int argc, char **argv) {
 
 	if (!signal_handling())
 		return EXIT_FAILURE;
+	
+	// create "text_files" directory to store files
+	if(access("text_files", F_OK) == -1){
+		mkdir("text_files", 0777);
+	}
 
 	run_server();
 
@@ -493,7 +496,6 @@ ssize_t read_from_fd(int fd, char *buffer, size_t count) {
   while (total < (ssize_t)count) {
     //fprintf(stderr, "read_all_from_fd: continuing reading\n");
     rtn_val = read(fd, buffer, count- total);
-		printf("rtn_val: %zd\n", rtn_val);
 
     if (rtn_val == -1) {
       if (errno != EINTR) {
@@ -526,7 +528,6 @@ ssize_t write_to_fd(int fd, char *buffer, size_t count) {
   while (total < (ssize_t)count) {
     //fprintf(stderr, "write_all_to_fd: continuing writing\n");
     rtn_val = write(fd, buffer + total, count - total);
-		printf("rtn_val: %zd\n", rtn_val);
 
     if (rtn_val == -1) {
       if (errno != EINTR) {
